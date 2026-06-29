@@ -240,7 +240,7 @@ table.tbl tr:active td{background:var(--blue-light)}
       <button class="btn btn-outline btn-sm" onclick="resetCCNum()">Reiniciar</button>
     </div>
     <div class="form-grid">
-      <div class="field"><label>Cliente (apto / nombre)</label><input id="cc-cliente" placeholder="203 MILCÍADES PUA" autocorrect="off"></div>
+      <div class="field"><label>Cliente (apto / nombre)</label><input id="cc-cliente" placeholder="203 MILCÍADES PUA" autocorrect="off" onblur="autoCargarClienteCC()"></div>
       <div class="field"><label>NIT / Cédula</label><input id="cc-nit" placeholder="203" inputmode="numeric"></div>
       <div class="field"><label>Dirección</label><input id="cc-dir" placeholder="CR 42 78 74"></div>
       <div class="field"><label>Concepto</label><input id="cc-concepto" placeholder="ADMINISTRACIÓN – JULIO DE 2026"></div>
@@ -2382,17 +2382,63 @@ function delPadron(apto){
 // ============================================================
 let masivaData=[];
 
+// Calcula el saldo pendiente de un apartamento: facturado - pagado
+function calcularSaldoApto(apto){
+  const cuentas=S.get('cc_hist')||[];
+  const pagos=S.get('pagos')||[];
+  const facturado=cuentas.filter(c=>c.apto===apto).reduce((s,c)=>s+parseFloat(c.total||0),0);
+  const pagado=pagos.filter(p=>p.apto===apto).reduce((s,p)=>s+parseFloat(p.valor||0),0);
+  const saldo=facturado-pagado;
+  return saldo>0?Math.round(saldo):0;
+}
+
+// Autocompleta los campos de la cuenta de cobro individual a partir del N° de apto
+// que el usuario digite al inicio del campo "Cliente" (ej. "203" o "203 NOMBRE")
+function autoCargarClienteCC(){
+  const valor=gv('cc-cliente').trim();
+  if(!valor)return;
+  // Extraer el primer "token" (apto): números o "Parq. 24"
+  let apto='';
+  const matchParq=valor.match(/^Parq\.?\s*\d+/i);
+  if(matchParq){apto=matchParq[0].replace(/Parq\.?\s*/i,'Parq. ');}
+  else{
+    const matchNum=valor.match(/^(\d{3,4})/);
+    if(matchNum)apto=matchNum[1];
+  }
+  if(!apto)return;
+  const padron=S.get('padron')||{};
+  const d=padron[apto];
+  if(!d)return;
+  // Completar el cliente si solo escribió el número
+  const clienteInput=document.getElementById('cc-cliente');
+  if(clienteInput && /^(\d{3,4}|Parq\.?\s*\d+)\s*$/i.test(valor)){
+    clienteInput.value=apto+' '+(d.prop||'');
+  }
+  // Autocompletar campos vacíos
+  const setIfEmpty=(id,val)=>{const e=document.getElementById(id);if(e && !e.value && val!=null && val!=='')e.value=val;};
+  setIfEmpty('cc-nit',d.nit||apto);
+  setIfEmpty('cc-dir',d.dir||DIR_COMUN);
+  // Calcular y cargar saldo pendiente
+  const saldo=calcularSaldoApto(apto);
+  const saldoInput=document.getElementById('cc-saldo');
+  if(saldoInput && !saldoInput.value){
+    saldoInput.value=saldo;
+    if(saldo>0)showToast('Apto '+apto+': saldo pendiente arrastrado $'+fmt(saldo));
+  }
+}
+
 function cargarMasiva(){
   const padron=S.get('padron')||{};
   const aptos=Object.keys(padron).sort();
   if(!aptos.length){showToast('Primero registra apartamentos en el Padrón');return;}
   masivaData=aptos.map(a=>{
     const d=padron[a];
-    return{apto:d.apto,prop:d.prop,nit:d.nit,dir:d.dir,cuota:d.cuota,mora:0,extra:0,retro:0,acuerdo:0,saldo:0,obs:''};
+    return{apto:d.apto,prop:d.prop,nit:d.nit,dir:d.dir,cuota:d.cuota,mora:0,extra:0,retro:0,acuerdo:0,saldo:calcularSaldoApto(d.apto),obs:''};
   });
   document.getElementById('mas-tabla-card').style.display='block';
   renderMasivaTabla();
-  showToast(aptos.length+' apartamentos cargados');
+  const totalSaldos=masivaData.reduce((s,r)=>s+r.saldo,0);
+  showToast(aptos.length+' apartamentos cargados. Saldos pendientes arrastrados: $'+fmt(totalSaldos));
 }
 
 function renderMasivaTabla(){
