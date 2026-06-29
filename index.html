@@ -436,7 +436,7 @@ table.tbl tr:active td{background:var(--blue-light)}
     </div>
     <div class="form-grid g3">
       <div class="field"><label>Fecha</label><input id="gst-fecha" type="date"></div>
-      <div class="field"><label>Beneficiario (a quién se paga)</label><input id="gst-desc" placeholder="Seguridad Nápoles Ltda."></div>
+      <div class="field"><label>Beneficiario (a quién se paga)</label><input id="gst-desc" placeholder="Seguridad Nápoles Ltda." list="gst-prov-list" onblur="autoCargarProveedorEnEgreso()"><datalist id="gst-prov-list"></datalist></div>
       <div class="field"><label>NIT / Cédula beneficiario</label><input id="gst-nit" placeholder="900.xxx.xxx-x"></div>
       <div class="field"><label>Categoría</label>
         <select id="gst-cat"><option>Seguridad</option><option>Mantenimiento</option><option>Servicios públicos</option><option>Administración</option><option>Reparaciones</option><option>Seguros</option><option>Otro</option></select>
@@ -566,7 +566,7 @@ table.tbl tr:active td{background:var(--blue-light)}
   <div class="card">
     <h2>Registrar pago a proveedor</h2>
     <div class="form-grid g3">
-      <div class="field"><label>Proveedor</label><select id="pvp-proveedor"></select></div>
+      <div class="field"><label>Proveedor</label><select id="pvp-proveedor" onchange="autoCargarProveedorEnPago()"></select></div>
       <div class="field"><label>Concepto</label><input id="pvp-concepto" placeholder="Abono / pago factura"></div>
       <div class="field"><label>Valor ($)</label><input id="pvp-valor" type="number" inputmode="numeric" placeholder="0"></div>
       <div class="field"><label>Fecha de pago</label><input id="pvp-fecha" type="date"></div>
@@ -792,7 +792,7 @@ function goTo(page){
   document.querySelector('.main').scrollTop=0;
   const fns={dashboard:renderDashboard,informes:()=>{initInformeFechas();generarInforme();},cartera:()=>{renderAptoSelect();renderAptoGrid();renderPagos();cargarDatosPadronEnPago();initReciboNum();},
     estadocartera:()=>{renderCarteraTabla();},
-    gastos:()=>{renderGastos();renderGstStats();initEgresoNum();},proveedores:()=>{renderProveedores();renderProveedorSelect();renderAlertasProveedor();renderPagosProveedor();renderFacturaSelect();renderCxP();},
+    gastos:()=>{renderGastos();renderGstStats();initEgresoNum();actualizarProveedoresDatalist();},proveedores:()=>{renderProveedores();renderProveedorSelect();renderAlertasProveedor();renderPagosProveedor();renderFacturaSelect();renderCxP();},
     actas:renderActas,comunicados:renderComunicados,cuentas:()=>{renderCCHistorial();initCCNum();},
     padron:()=>{renderPadronSelect();renderPadronTabla();renderHistPropietarios();},
     masiva:()=>{},
@@ -853,6 +853,60 @@ const DATOS_INICIALES_LUKAS=[
 
 const ETIQUETAS_CARTERA={ord:'Cartera ordinaria',ext23:'Cuota extraordinaria 2023',ext25:'Cuota extraordinaria 2025',int:'Intereses de mora',retro:'Retroactivo',acu:'Acuerdo de pago',juri:'Honorarios jurídicos',asc:'Mantenimiento ascensor'};
 
+// Pagos históricos recibidos hasta el 27 de junio de 2026 (hoja "Pagos" del Excel)
+// [apto, valor, fecha, forma de pago]
+const PAGOS_INICIALES=[
+  ['203',676000,'2026-05-27','Efectivo'],
+  ['301',780000,'2026-06-11','Efectivo'],
+  ['303',683000,'2026-05-30','Datáfono'],
+  ['304',722000,'2026-05-27','Efectivo'],
+  ['304',722000,'2026-06-24','Efectivo'],
+  ['402',680000,'2026-05-27','Efectivo'],
+  ['402',1849373,'2026-06-04','Efectivo'],
+  ['404',1400000,'2026-06-10','Efectivo'],
+  ['502',681000,'2026-06-10','Efectivo'],
+  ['504',1021600,'2026-06-10','Efectivo'],
+  ['601',688000,'2026-06-18','Efectivo'],
+  ['701',702000,'2026-06-11','Efectivo'],
+  ['703',682000,'2026-05-19','Datáfono'],
+  ['704',688000,'2026-05-20','Datáfono'],
+  ['704',700000,'2026-06-20','Datáfono'],
+  ['802',689000,'2026-05-27','Efectivo'],
+  ['802',689000,'2026-06-27','Efectivo'],
+  ['803',681000,'2026-06-03','Efectivo'],
+  ['804',708000,'2026-06-11','Efectivo'],
+  ['901',681000,'2026-02-04','Datáfono'],
+  ['903',677000,'2026-05-29','Datáfono'],
+  ['904',681000,'2026-06-14','Efectivo']
+];
+
+// Proveedores (hoja "Proveedores" del Excel)
+const PROVEEDORES_INICIALES=[
+  {nombre:'AIR-e',nit:'901380930-2',servicio:'Servicios Públicos',estado:'Activo',obs:'NIC: 2109780'},
+  {nombre:'AAA',nit:'800135913-1',servicio:'Servicios Públicos',estado:'Activo',obs:'Póliza: 828204 / Acuerdo de Pago'},
+  {nombre:'Finesa',nit:'805012610-5',servicio:'Seguros',contacto:'María',tel:'3106830898',estado:'Activo',valor:558366,obs:'Crédito: 203018983'},
+  {nombre:'Integraseo SAS',nit:'900322502-2',servicio:'Conserje/Aseo',contacto:'Shirley De La Hoz',tel:'3043169448',email:'servicioalcliente@integraseo.com.co',dir:'Carrera 49B #74-175',estado:'Activo',valor:17552697},
+  {nombre:'Ascensores Schindler de Colombia SAS',nit:'860005289-4',servicio:'Ascensor',estado:'Activo',valor:550303},
+  {nombre:'MUNDO PISCINA MG SAS',nit:'900685023-3',servicio:'Insumos/Suministros',tel:'3157241995',email:'facturacionmundopiscina@gmail.com',dir:'Cra 67 No. 76-53',banco:'Bancolombia',tipocuenta:'Corriente',cuenta:'876-000004-43'},
+  {nombre:'Homecenter',nit:'800242106-2',servicio:'Insumos/Suministros',estado:'No Aplica'},
+  {nombre:'Roberto Carlos Córdoba De La Hoz',nit:'8777043',servicio:'Reparaciones',contacto:'Roberto Carlos Córdoba De La Hoz',tel:'300400749',estado:'No Aplica',banco:'Nequi',tipocuenta:'Ahorro',cuenta:'300400749',obs:'Servicios de albañilería y plomería.'},
+  {nombre:'Cipriano Vargas Maestre',nit:'72147294',servicio:'Mantenimiento',contacto:'Cipriano Vargas Maestre',tel:'3007854701',dir:'Calle 45G #3-498 BL20 AP201 Ciudadela 20 de Julio',estado:'No Aplica',banco:'Bancolombia',tipocuenta:'Ahorro',cuenta:'76984700691',obs:'Motobomba y Lavado de Tanques'},
+  {nombre:'Seguridad Nápoles',nit:'860523408-6',servicio:'Seguridad',email:'directorsucursalbarranquilla@seguridadnapolesltda.com',dir:'Cra. 45 #85 - 161',estado:'Inactivo',obs:'Alta cartera en mora'},
+  {nombre:'CONSULTORIA LABORAL Y ARQUITECTURA DE PROYECTOS S.A.S.',nit:'900946337-1',servicio:'Mantenimiento',tel:'3022872364',email:'gerencia.clapsas@gmail.com',dir:'Calle 73 #39-139',estado:'Activo'},
+  {nombre:'SYNERGY PH SAS',nit:'901095336',servicio:'Honorarios',estado:'Activo'}
+];
+
+// Cuentas por pagar al 7 de mayo de 2026 (hoja "Cuentas por Pagar" del Excel)
+// [proveedor, concepto/servicio, valor pendiente]
+const FACTURAS_INICIALES=[
+  ['Seguridad Nápoles','Saldo en mora servicio de seguridad',206658792],
+  ['AAA','Saldo servicios públicos – acuerdo de pago',17317899],
+  ['Ascensores Schindler de Colombia SAS','Saldo mantenimiento ascensor',550303],
+  ['Integraseo SAS','Saldo servicio conserje/aseo',35105394],
+  ['SYNERGY PH SAS','Saldo honorarios',891697],
+  ['CONSULTORIA LABORAL Y ARQUITECTURA DE PROYECTOS S.A.S.','Saldo mantenimiento',17291430]
+];
+
 function precargarDatosIniciales(){
   // No sobrescribir si ya hay padrón cargado
   const padronActual=S.get('padron');
@@ -908,8 +962,56 @@ function precargarDatosIniciales(){
   S.set('padron',padron);
   S.set('cc_hist',carteraHist);
   S.set('unidades_especiales',especiales);
+
+  // Cargar pagos históricos
+  const pagosExistentes=S.get('pagos')||[];
+  if(pagosExistentes.length===0){
+    const pagos=[];
+    PAGOS_INICIALES.forEach(function(p){
+      const apto=p[0], valor=p[1], fecha=p[2], fpago=p[3];
+      const datoApto=padron[apto];
+      pagos.push({
+        apto:apto,
+        prop:datoApto?datoApto.prop:'',
+        concepto:'Pago administración',
+        valor:valor,
+        fecha:fecha,
+        estado:'pagado',
+        fpago:fpago,
+        obs:'Pago registrado en gestión histórica al 27 de junio de 2026',
+        saldoPend:''
+      });
+    });
+    S.set('pagos',pagos);
+  }
+
+  // Cargar proveedores
+  const proveedoresExistentes=S.get('proveedores')||[];
+  if(proveedoresExistentes.length===0){
+    S.set('proveedores',PROVEEDORES_INICIALES);
+  }
+
+  // Cargar cuentas por pagar (facturas pendientes a proveedores)
+  const facturasExistentes=S.get('facturas_prov')||[];
+  if(facturasExistentes.length===0){
+    const facturas=[];
+    FACTURAS_INICIALES.forEach(function(f){
+      facturas.push({
+        proveedor:f[0],
+        num:'SALDO-INI',
+        concepto:f[1],
+        valor:f[2],
+        fecha:FECHA_CORTE_CARTERA,
+        vence:FECHA_CORTE_CARTERA
+      });
+    });
+    S.set('facturas_prov',facturas);
+  }
+
   // Avisar en consola para diagnóstico
-  try{console.log('Lukas: precarga inicial completada — '+DATOS_INICIALES_LUKAS.length+' unidades, '+carteraHist.length+' saldos heredados.');}catch(e){}
+  try{
+    console.log('Lukas: precarga inicial completada — '+DATOS_INICIALES_LUKAS.length+' unidades, '+carteraHist.length+' saldos heredados, '+PAGOS_INICIALES.length+' pagos históricos, '+PROVEEDORES_INICIALES.length+' proveedores, '+FACTURAS_INICIALES.length+' facturas por pagar.');
+  }catch(e){}
 }
 
 // Ejecutar precarga ANTES de cualquier render
@@ -962,7 +1064,7 @@ function verApto(apto){
 // CUENTAS
 let ccItems=[{desc:'Cuota Ordinaria de Administración',cant:1,vr:583000,inm:''},{desc:'Intereses de Mora',cant:1,vr:0,inm:''}];
 function initCCNum(){
-  const n=S.get('cc_num')||993;
+  const n=S.get('cc_num')||1680;
   document.getElementById('cc-num').value=n;
   document.getElementById('cc-num-info').textContent='Último guardado: '+n;
   renderCCItems();
@@ -1271,7 +1373,7 @@ function buildReciboHtml(p, numRecibo){
 }
 
 function initReciboNum(){
-  const n=S.get('recibo_num')||1;
+  const n=S.get('recibo_num')||5478;
   const inp=document.getElementById('car-recibo-num');
   if(inp){inp.value=n;}
   const info=document.getElementById('car-recibo-info');
@@ -1286,7 +1388,7 @@ function saveReciboNum(){
 function asignarNumRecibo(p,i){
   if(p.recibo)return p.recibo;
   // Toma el número que el usuario tenga puesto en el campo (o el contador guardado)
-  let num=parseInt((document.getElementById('car-recibo-num')||{}).value)||parseInt(S.get('recibo_num')||1);
+  let num=parseInt((document.getElementById('car-recibo-num')||{}).value)||parseInt(S.get('recibo_num')||5478);
   p.recibo=num;
   const pagos=S.get('pagos')||[];pagos[i]=p;S.set('pagos',pagos);
   S.set('recibo_num',num+1);
@@ -1328,7 +1430,7 @@ function delPago(i){confirmarEliminar('¿Eliminar este pago?',function(){const p
 let gstEditIndex=-1;
 
 function initEgresoNum(){
-  const n=S.get('egreso_num')||1;
+  const n=S.get('egreso_num')||3162;
   const inp=document.getElementById('gst-num');
   if(inp){inp.value=n;document.getElementById('gst-num-info').textContent='Último guardado: '+n;}
 }
@@ -1589,19 +1691,114 @@ function renderAlertasProveedor(){
 // Pagos a proveedores
 function renderProveedorSelect(){
   const sel=document.getElementById('pvp-proveedor');
-  if(!sel)return;
-  const p=S.get('proveedores')||[];
-  sel.innerHTML=p.map(x=>`<option>${x.nombre}</option>`).join('')||'<option>— sin proveedores —</option>';
+  if(sel){
+    const p=S.get('proveedores')||[];
+    sel.innerHTML=p.map(x=>`<option>${x.nombre}</option>`).join('')||'<option>— sin proveedores —</option>';
+  }
+  // También actualizar el datalist usado en el formulario de comprobante de egreso
+  actualizarProveedoresDatalist();
 }
 
 function savePagoProveedor(){
   const pagos=S.get('pagos_prov')||[];
-  pagos.push({proveedor:gv('pvp-proveedor'),concepto:gv('pvp-concepto'),
-    valor:parseFloat(gv('pvp-valor'))||0,fecha:gv('pvp-fecha')||today(),
-    factura:gv('pvp-factura'),fpago:gv('pvp-fpago')});
+  const proveedores=S.get('proveedores')||[];
+  const nombreProv=gv('pvp-proveedor');
+  const provData=proveedores.find(p=>p.nombre===nombreProv)||{};
+  const valor=parseFloat(gv('pvp-valor'))||0;
+  if(!valor){showToast('Escribe el valor del pago');return;}
+  const fecha=gv('pvp-fecha')||today();
+  const concepto=gv('pvp-concepto')||('Pago a '+nombreProv);
+  const factura=gv('pvp-factura');
+  const fpago=gv('pvp-fpago');
+
+  // 1) Registrar el pago a proveedor (como antes)
+  pagos.push({proveedor:nombreProv,concepto:concepto,
+    valor:valor,fecha:fecha,
+    factura:factura,fpago:fpago,
+    nit:provData.nit||'',banco:provData.banco||''});
   S.set('pagos_prov',pagos);
-  renderPagosProveedor();renderCxP();showToast('Pago a proveedor registrado');
+
+  // 2) Generar AUTOMÁTICAMENTE el comprobante de egreso (interconexión)
+  const gastos=S.get('gastos')||[];
+  const numEgreso=parseInt(S.get('egreso_num'))||3162;
+  // Determinar categoría según servicio del proveedor
+  const servicio=(provData.servicio||'').toLowerCase();
+  let cat='Otro';
+  if(servicio.includes('seguridad'))cat='Seguridad';
+  else if(servicio.includes('mantenimiento')||servicio.includes('reparación')||servicio.includes('reparaciones'))cat='Mantenimiento';
+  else if(servicio.includes('público')||servicio.includes('servicios públicos'))cat='Servicios públicos';
+  else if(servicio.includes('aseo')||servicio.includes('conserje'))cat='Mantenimiento';
+  else if(servicio.includes('ascensor'))cat='Mantenimiento';
+  else if(servicio.includes('seguro'))cat='Seguros';
+  else if(servicio.includes('honorario')||servicio.includes('administración'))cat='Administración';
+
+  gastos.push({
+    num:numEgreso,fecha:fecha,cat:cat,
+    desc:nombreProv,nit:provData.nit||'',valor:valor,
+    factura:factura,fpago:fpago,banco:provData.banco||'',
+    cheque:'',concepto:concepto,obs:'Generado automáticamente al registrar pago a proveedor'
+  });
+  S.set('gastos',gastos);
+  S.set('egreso_num',numEgreso+1);
+
+  renderPagosProveedor();renderCxP();
+  if(typeof renderGastos==='function')renderGastos();
+  if(typeof renderGstStats==='function')renderGstStats();
+  if(typeof initEgresoNum==='function')initEgresoNum();
+  showToast('Pago registrado y comprobante de egreso N° '+numEgreso+' generado');
   ['pvp-concepto','pvp-valor','pvp-factura'].forEach(id=>{var e=document.getElementById(id);if(e)e.value='';});
+}
+
+// Autocompletar datos del proveedor al seleccionarlo en el formulario de pagos
+function autoCargarProveedorEnPago(){
+  const proveedores=S.get('proveedores')||[];
+  const nombre=gv('pvp-proveedor');
+  const p=proveedores.find(x=>x.nombre===nombre);
+  if(!p)return;
+  // Si el concepto está vacío, sugerir uno por defecto basado en el servicio
+  const conceptoInput=document.getElementById('pvp-concepto');
+  if(conceptoInput && !conceptoInput.value && p.servicio){
+    conceptoInput.value='Pago servicio: '+p.servicio;
+  }
+  // Si la forma de pago está vacía y el proveedor tiene banco, sugerir Transferencia
+  const fpagoSel=document.getElementById('pvp-fpago');
+  if(fpagoSel && p.banco){
+    fpagoSel.value='Transferencia';
+  }
+}
+
+// Autocompletar NIT del beneficiario al escribir en el formulario de comprobante de egreso
+function autoCargarProveedorEnEgreso(){
+  const proveedores=S.get('proveedores')||[];
+  const nombre=gv('gst-desc').trim();
+  if(!nombre)return;
+  const p=proveedores.find(x=>(x.nombre||'').toLowerCase()===nombre.toLowerCase());
+  if(!p)return;
+  // Autocompletar campos vacíos
+  const setIfEmpty=(id,val)=>{const e=document.getElementById(id);if(e && !e.value && val)e.value=val;};
+  setIfEmpty('gst-nit',p.nit);
+  setIfEmpty('gst-banco',p.banco);
+  // Sugerir categoría según servicio
+  const sel=document.getElementById('gst-cat');
+  if(sel && p.servicio){
+    const serv=(p.servicio||'').toLowerCase();
+    let cat='';
+    if(serv.includes('seguridad'))cat='Seguridad';
+    else if(serv.includes('mantenimiento')||serv.includes('aseo')||serv.includes('conserje')||serv.includes('ascensor'))cat='Mantenimiento';
+    else if(serv.includes('público'))cat='Servicios públicos';
+    else if(serv.includes('seguro'))cat='Seguros';
+    else if(serv.includes('honorario')||serv.includes('administración'))cat='Administración';
+    else if(serv.includes('reparación'))cat='Reparaciones';
+    if(cat)sel.value=cat;
+  }
+}
+
+// Actualizar el datalist de proveedores (para autocompletar en formulario de egreso)
+function actualizarProveedoresDatalist(){
+  const dl=document.getElementById('gst-prov-list');
+  if(!dl)return;
+  const proveedores=S.get('proveedores')||[];
+  dl.innerHTML=proveedores.map(p=>`<option value="${p.nombre}">`).join('');
 }
 
 function renderPagosProveedor(){
@@ -2392,6 +2589,32 @@ function calcularSaldoApto(apto){
   return saldo>0?Math.round(saldo):0;
 }
 
+// Devuelve el desglose detallado del saldo pendiente de un apto:
+// suma de items de cc_hist agrupados por concepto, menos los pagos como línea de abonos.
+// Resultado: {items:[{desc,vr}], total}
+function obtenerDesgloseSaldoApto(apto){
+  const cuentas=(S.get('cc_hist')||[]).filter(c=>c.apto===apto);
+  const pagos=(S.get('pagos')||[]).filter(p=>p.apto===apto);
+  const facturado=cuentas.reduce((s,c)=>s+parseFloat(c.total||0),0);
+  const pagado=pagos.reduce((s,p)=>s+parseFloat(p.valor||0),0);
+  const saldoNeto=facturado-pagado;
+  if(saldoNeto<=0)return{items:[],total:0};
+  // Agrupar items por concepto
+  const conceptos={};
+  cuentas.forEach(c=>{
+    (c.items||[]).forEach(it=>{
+      if(!it.desc)return;
+      const val=parseFloat(it.vr||0)*parseFloat(it.cant||1);
+      if(!val)return;
+      conceptos[it.desc]=(conceptos[it.desc]||0)+val;
+    });
+  });
+  const items=Object.keys(conceptos).filter(k=>conceptos[k]>0).map(k=>({desc:k,vr:Math.round(conceptos[k])}));
+  // Si hay pagos, agregar línea de abonos como valor negativo
+  if(pagado>0)items.push({desc:'Menos: Abonos recibidos',vr:-Math.round(pagado)});
+  return{items:items,total:Math.round(saldoNeto)};
+}
+
 // Autocompleta los campos de la cuenta de cobro individual a partir del N° de apto
 // que el usuario digite al inicio del campo "Cliente" (ej. "203" o "203 NOMBRE")
 function autoCargarClienteCC(){
@@ -2433,7 +2656,8 @@ function cargarMasiva(){
   if(!aptos.length){showToast('Primero registra apartamentos en el Padrón');return;}
   masivaData=aptos.map(a=>{
     const d=padron[a];
-    return{apto:d.apto,prop:d.prop,nit:d.nit,dir:d.dir,cuota:d.cuota,mora:0,extra:0,retro:0,acuerdo:0,saldo:calcularSaldoApto(d.apto),obs:''};
+    const det=obtenerDesgloseSaldoApto(d.apto);
+    return{apto:d.apto,prop:d.prop,nit:d.nit,dir:d.dir,cuota:d.cuota,mora:0,extra:0,retro:0,acuerdo:0,saldo:det.total,saldoItems:det.items,obs:''};
   });
   document.getElementById('mas-tabla-card').style.display='block';
   renderMasivaTabla();
@@ -2498,7 +2722,16 @@ function buildCuentaMasiva(r, num){
   if(r.extra>0)items+=`<tr><td style="padding:6px 12px;border-bottom:1px solid #e8e8e8;width:70%">Cuota Extraordinaria</td><td style="padding:6px 12px;text-align:right;border-bottom:1px solid #e8e8e8;border-left:1px solid #e8e8e8;width:30%;white-space:nowrap">$${fmt(r.extra)}</td></tr>`;
   if(r.retro>0)items+=`<tr><td style="padding:6px 12px;border-bottom:1px solid #e8e8e8;width:70%">Retroactivo</td><td style="padding:6px 12px;text-align:right;border-bottom:1px solid #e8e8e8;border-left:1px solid #e8e8e8;width:30%;white-space:nowrap">$${fmt(r.retro)}</td></tr>`;
   if(r.acuerdo>0)items+=`<tr><td style="padding:6px 12px;border-bottom:1px solid #e8e8e8;width:70%">Acuerdo de Pago</td><td style="padding:6px 12px;text-align:right;border-bottom:1px solid #e8e8e8;border-left:1px solid #e8e8e8;width:30%;white-space:nowrap">$${fmt(r.acuerdo)}</td></tr>`;
-  if(r.saldo>0)items+=`<tr><td style="padding:6px 12px;border-bottom:1px solid #e8e8e8;width:70%">Saldo Anterior de Cartera</td><td style="padding:6px 12px;text-align:right;border-bottom:1px solid #e8e8e8;border-left:1px solid #e8e8e8;width:30%;white-space:nowrap">$${fmt(r.saldo)}</td></tr>`;
+  // Saldo anterior: si hay desglose detallado, mostrar cada concepto; si no, mostrar línea única
+  if(r.saldoItems && r.saldoItems.length){
+    items+=`<tr><td colspan="2" style="padding:8px 12px 4px;font-size:10px;font-weight:700;color:#1a3fa0;background:#f4f7ff;text-transform:uppercase;letter-spacing:.4px">Saldos anteriores pendientes (al 7 de mayo de 2026)</td></tr>`;
+    r.saldoItems.forEach(it=>{
+      const esAbono=it.vr<0;
+      items+=`<tr><td style="padding:6px 12px 6px 22px;border-bottom:1px solid #e8e8e8;width:70%;font-size:11px;${esAbono?'color:#0a7a3d;font-style:italic':''}">${it.desc}</td><td style="padding:6px 12px;text-align:right;border-bottom:1px solid #e8e8e8;border-left:1px solid #e8e8e8;width:30%;white-space:nowrap;${esAbono?'color:#0a7a3d':''}">${esAbono?'-':''}$${fmt(Math.abs(it.vr))}</td></tr>`;
+    });
+  }else if(r.saldo>0){
+    items+=`<tr><td style="padding:6px 12px;border-bottom:1px solid #e8e8e8;width:70%">Saldo Anterior de Cartera</td><td style="padding:6px 12px;text-align:right;border-bottom:1px solid #e8e8e8;border-left:1px solid #e8e8e8;width:30%;white-space:nowrap">$${fmt(r.saldo)}</td></tr>`;
+  }
   return `<div class="cuenta-lote">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2.5px solid #1a3fa0;padding-bottom:12px;margin-bottom:14px">
       <div><span style="font-size:26px;font-weight:900;color:#1a3fa0;font-style:italic">Lukas</span>
@@ -2530,7 +2763,7 @@ function buildCuentaMasiva(r, num){
 }
 
 function generarLoteHtml(){
-  let numBase=parseInt(S.get('cc_num')||993);
+  let numBase=parseInt(S.get('cc_num')||1680);
   let html='<div class="lote-wrap">';
   masivaData.forEach((r,idx)=>{
     html+=buildCuentaMasiva(r,numBase+idx);
@@ -2557,7 +2790,7 @@ function imprimirMasiva(){
 function guardarMasiva(){
   if(!masivaData.length){showToast('Carga primero los apartamentos');return;}
   const hist=S.get('cc_hist')||[];
-  let numBase=parseInt(S.get('cc_num')||993);
+  let numBase=parseInt(S.get('cc_num')||1680);
   const concepto=gv('mas-concepto');
   masivaData.forEach((r,idx)=>{
     const total=r.cuota+r.mora+r.extra+r.retro+(r.acuerdo||0)+r.saldo;
