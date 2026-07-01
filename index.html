@@ -377,6 +377,10 @@ table.tbl tr:active td{background:var(--blue-light)}
     <div class="form-grid g1" style="margin-top:10px">
       <div class="field"><label>Observaciones</label><textarea id="car-obs" placeholder="Ej: pago tardío, acuerdo de pago..."></textarea></div>
     </div>
+    <div id="car-pendientes-panel" style="display:none;background:#f0f6ff;border:1.5px solid #1a3fa0;border-radius:8px;padding:14px;margin-bottom:16px">
+      <div style="font-weight:700;color:#1a3fa0;margin-bottom:8px">📋 Estado del apartamento <span id="car-pend-apto"></span></div>
+      <div id="car-pend-detalle" style="font-size:13px;color:#333;line-height:1.7"></div>
+    </div>
     <div class="btn-group"><button class="btn btn-primary" onclick="savePago()">Registrar pago</button></div>
   </div>
   <div class="card">
@@ -1141,15 +1145,43 @@ function cargarDatosPadronEnPago(){
   const d=padron[apto];
   if(d){
     if(d.prop)document.getElementById('car-prop').value=d.prop;
-    // Si el campo concepto está vacío, sugerir la cuota ordinaria como referencia
     const valorInput=document.getElementById('car-valor');
     if(valorInput && !valorInput.value && d.cuota){
       valorInput.placeholder='Cuota: '+fmt(d.cuota);
     }
   }else{
-    // Si no hay datos en el padrón, dejar el campo de propietario editable y vacío
     document.getElementById('car-prop').value='';
   }
+  mostrarPendientesApto(apto);
+}
+
+// Muestra el estado del apartamento: facturado, pagado y pendiente por concepto
+function mostrarPendientesApto(apto){
+  const panel=document.getElementById('car-pendientes-panel');
+  const detalle=document.getElementById('car-pend-detalle');
+  const aptoSpan=document.getElementById('car-pend-apto');
+  if(!panel||!detalle){return;}
+  if(!apto){panel.style.display='none';return;}
+  const norm=function(x){return String(x==null?'':x).trim().toUpperCase();};
+  const na=norm(apto);
+  const cuentas=(S.get('cc_hist')||[]).filter(function(c){return norm(c.apto)===na;});
+  const pagos=(S.get('pagos')||[]).filter(function(p){return norm(p.apto)===na;});
+  const totalFact=cuentas.reduce(function(s,c){return s+parseFloat(c.total||0);},0);
+  const totalPag=pagos.reduce(function(s,p){return s+parseFloat(p.valor||0);},0);
+  const saldo=totalFact-totalPag;
+  if(aptoSpan)aptoSpan.textContent=apto;
+  let html='';
+  html+='<div style="display:flex;justify-content:space-between;padding:3px 0"><span>Total facturado ('+cuentas.length+' cuentas):</span><strong>$'+fmt(totalFact)+'</strong></div>';
+  html+='<div style="display:flex;justify-content:space-between;padding:3px 0"><span>Total pagado ('+pagos.length+' pagos):</span><strong style="color:#16a34a">$'+fmt(totalPag)+'</strong></div>';
+  html+='<div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid #cdd9ec;margin-top:4px"><span style="font-weight:700">Saldo pendiente:</span><strong style="color:'+(saldo>0?'#c0392b':'#16a34a')+';font-size:15px">$'+fmt(saldo)+'</strong></div>';
+  if(cuentas.length===0){
+    html+='<div style="color:#8a5a00;margin-top:6px;font-size:12px">⚠️ Este apartamento no tiene cuentas de cobro registradas todavía.</div>';
+  }
+  if(saldo<=0 && cuentas.length>0){
+    html+='<div style="color:#16a34a;margin-top:6px;font-size:12px">✅ Apartamento al día.</div>';
+  }
+  detalle.innerHTML=html;
+  panel.style.display='block';
 }
 
 let pagoEditIndex=-1;
@@ -2183,7 +2215,7 @@ function aplicarBloqueosConsulta(){
   const permitidas=['goto','closemodal','document','verapto','veracta','vercom',
     'generarinforme','imprimirinforme','exportarinformecsv','exportgastos',
     'previewcc','printcom','printultimocom','printasamblea','calcquorum',
-    'renderpagos','rendergastos','entrarconsulta','validaradmin','mostrarloginadmin','previewmasiva','imprimirmasiva','cargarmasiva','cargarapto','verproveedor','imprimiregreso','importarrespaldo','cargardatospadronenpago','imprimirrecibo','calcularcartera','exportarcartera','imprimircartera','imprimirtodosrecibos','generarrespaldotexto','copiarrespaldotexto','restaurarrespaldotexto','descargarcomopdf','cancelaredicioncc','savemasnuminicio','initmasnuminicio',];
+    'renderpagos','rendergastos','entrarconsulta','validaradmin','mostrarloginadmin','previewmasiva','imprimirmasiva','cargarmasiva','cargarapto','verproveedor','imprimiregreso','importarrespaldo','cargardatospadronenpago','imprimirrecibo','calcularcartera','exportarcartera','imprimircartera','imprimirtodosrecibos','generarrespaldotexto','copiarrespaldotexto','restaurarrespaldotexto','descargarcomopdf','cancelaredicioncc','savemasnuminicio','initmasnuminicio','mostrarpendientesapto',];
   document.querySelectorAll('button').forEach(b=>{
     if(b.id==='logout-btn')return;
     const oc=(b.getAttribute('onclick')||'').toLowerCase();
@@ -2371,9 +2403,12 @@ function cargarMasiva(){
   const cuentas=S.get('cc_hist')||[];
   const pagos=S.get('pagos')||[];
   const saldoAnteriorPorApto={};
+  // Normalizar apto para emparejar aunque haya espacios o mayúsculas distintas
+  const normApto=function(x){return String(x==null?'':x).trim().toUpperCase();};
   aptos.forEach(function(a){
-    const facturado=cuentas.filter(function(c){return c.apto===a;}).reduce(function(s,c){return s+parseFloat(c.total||0);},0);
-    const pagado=pagos.filter(function(p){return p.apto===a;}).reduce(function(s,p){return s+parseFloat(p.valor||0);},0);
+    const na=normApto(a);
+    const facturado=cuentas.filter(function(c){return normApto(c.apto)===na;}).reduce(function(s,c){return s+parseFloat(c.total||0);},0);
+    const pagado=pagos.filter(function(p){return normApto(p.apto)===na;}).reduce(function(s,p){return s+parseFloat(p.valor||0);},0);
     const saldo=facturado-pagado;
     saldoAnteriorPorApto[a]=saldo>0?Math.round(saldo):0; // solo saldos positivos (deuda)
   });
@@ -2562,9 +2597,11 @@ function calcularCartera(sinMora){
   cuentas.forEach(c=>{if(c.apto)unidades[c.apto]=true;});
   pagos.forEach(p=>{if(p.apto)unidades[p.apto]=true;});
 
+  const _norm=function(x){return String(x==null?'':x).trim().toUpperCase();};
   carteraCalculada=Object.keys(unidades).sort().map(apto=>{
-    const facturado=cuentas.filter(c=>c.apto===apto).reduce((s,c)=>s+parseFloat(c.total||0),0);
-    const pagado=pagos.filter(p=>p.apto===apto).reduce((s,p)=>s+parseFloat(p.valor||0),0);
+    const na=_norm(apto);
+    const facturado=cuentas.filter(c=>_norm(c.apto)===na).reduce((s,c)=>s+parseFloat(c.total||0),0);
+    const pagado=pagos.filter(p=>_norm(p.apto)===na).reduce((s,p)=>s+parseFloat(p.valor||0),0);
     const saldoCapital=facturado-pagado;
     // Mora: solo sobre saldo positivo (lo que realmente debe), sin capitalizar
     const mora=saldoCapital>0?Math.round(saldoCapital*(tasa/100)):0;
