@@ -1180,6 +1180,22 @@ function mostrarPendientesApto(apto){
   if(saldo<=0 && cuentas.length>0){
     html+='<div style="color:#16a34a;margin-top:6px;font-size:12px">✅ Apartamento al día.</div>';
   }
+  // DETALLE de cada cuenta registrada
+  if(cuentas.length){
+    html+='<div style="margin-top:10px;padding-top:8px;border-top:1px dashed #aaa;font-size:12px"><strong>Cuentas de cobro registradas:</strong>';
+    cuentas.forEach(function(c){
+      html+='<div style="padding:2px 0">• N°'+(c.num||'?')+' | '+(c.fecha||'')+' | '+(c.concepto||'')+' → <strong>$'+fmt(c.total||0)+'</strong></div>';
+    });
+    html+='</div>';
+  }
+  // DETALLE de cada pago registrado
+  if(pagos.length){
+    html+='<div style="margin-top:8px;font-size:12px"><strong>Pagos registrados:</strong>';
+    pagos.forEach(function(p){
+      html+='<div style="padding:2px 0;color:#0a6b30">• '+(p.fecha||'')+' | '+(p.concepto||'')+' → <strong>$'+fmt(p.valor||0)+'</strong></div>';
+    });
+    html+='</div>';
+  }
   detalle.innerHTML=html;
   panel.style.display='block';
 }
