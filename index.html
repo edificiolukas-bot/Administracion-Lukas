@@ -327,6 +327,10 @@ table.tbl tr:active td{background:var(--blue-light)}
       <div class="field"><label>Fecha factura</label><input id="mas-fecha" type="date"></div>
       <div class="field"><label>Fecha vencimiento</label><input id="mas-vence" type="date"></div>
     </div>
+    <div class="form-grid g3">
+      <div class="field"><label>N° de la primera cuenta</label><input id="mas-num-inicio" type="number" inputmode="numeric" oninput="saveMasNumInicio()" placeholder="1680"></div>
+    </div>
+    <p style="font-size:12px;color:var(--text3);margin:2px 0 10px">Las cuentas se numerarán consecutivamente desde este número. Se sincroniza con el consecutivo general.</p>
     <div class="btn-group">
       <button class="btn btn-primary" onclick="cargarMasiva()">Cargar apartamentos del padrón</button>
     </div>
@@ -800,7 +804,7 @@ function goTo(page){
     gastos:()=>{renderGastos();renderGstStats();initEgresoNum();},proveedores:()=>{renderProveedores();renderProveedorSelect();renderAlertasProveedor();renderPagosProveedor();renderFacturaSelect();renderCxP();},
     actas:renderActas,comunicados:renderComunicados,cuentas:()=>{renderCCHistorial();initCCNum();},
     padron:()=>{renderPadronSelect();renderPadronTabla();renderHistPropietarios();},
-    masiva:()=>{},
+    masiva:()=>{initMasNumInicio();},
     asamblea:()=>{renderAsmTabla();calcQuorum();},respaldo:renderInfoAlmacenamiento};
   if(fns[page])fns[page]();
   if(MODO==='consulta')setTimeout(aplicarBloqueosConsulta,30);
@@ -2179,7 +2183,7 @@ function aplicarBloqueosConsulta(){
   const permitidas=['goto','closemodal','document','verapto','veracta','vercom',
     'generarinforme','imprimirinforme','exportarinformecsv','exportgastos',
     'previewcc','printcom','printultimocom','printasamblea','calcquorum',
-    'renderpagos','rendergastos','entrarconsulta','validaradmin','mostrarloginadmin','previewmasiva','imprimirmasiva','cargarmasiva','cargarapto','verproveedor','imprimiregreso','importarrespaldo','cargardatospadronenpago','imprimirrecibo','calcularcartera','exportarcartera','imprimircartera','imprimirtodosrecibos','generarrespaldotexto','copiarrespaldotexto','restaurarrespaldotexto','descargarcomopdf','cancelaredicioncc',];
+    'renderpagos','rendergastos','entrarconsulta','validaradmin','mostrarloginadmin','previewmasiva','imprimirmasiva','cargarmasiva','cargarapto','verproveedor','imprimiregreso','importarrespaldo','cargardatospadronenpago','imprimirrecibo','calcularcartera','exportarcartera','imprimircartera','imprimirtodosrecibos','generarrespaldotexto','copiarrespaldotexto','restaurarrespaldotexto','descargarcomopdf','cancelaredicioncc','savemasnuminicio','initmasnuminicio',];
   document.querySelectorAll('button').forEach(b=>{
     if(b.id==='logout-btn')return;
     const oc=(b.getAttribute('onclick')||'').toLowerCase();
@@ -2347,6 +2351,17 @@ function delPadron(apto){
 let masivaData=[];
 let _masivaGuardada=false;
 
+function saveMasNumInicio(){
+  const v=parseInt(gv('mas-num-inicio'));
+  if(v && v>0){ S.set('cc_num', v); }
+}
+
+function initMasNumInicio(){
+  const n=S.get('cc_num')||1680;
+  const campo=document.getElementById('mas-num-inicio');
+  if(campo)campo.value=n;
+}
+
 function cargarMasiva(){
   _masivaGuardada=false;
   const padron=S.get('padron')||{};
@@ -2461,7 +2476,7 @@ function buildCuentaMasiva(r, num){
 }
 
 function generarLoteHtml(){
-  let numBase=parseInt(S.get('cc_num')||993);
+  let numBase=parseInt(gv('mas-num-inicio'))||parseInt(S.get('cc_num')||1680);
   let html='<div class="lote-wrap">';
   masivaData.forEach((r,idx)=>{
     html+=buildCuentaMasiva(r,numBase+idx);
@@ -2503,7 +2518,8 @@ function guardarMasiva(){
   const yaGuardado=hist.filter(function(h){return h.concepto===concepto && h.fecha===fecha;}).length;
   const hacerGuardado=function(){
     const hist2=S.get('cc_hist')||[];
-    let numBase=parseInt(S.get('cc_num')||993);
+    // Priorizar el número visible en el campo de la primera cuenta
+    let numBase=parseInt(gv('mas-num-inicio'))||parseInt(S.get('cc_num')||1680);
     masivaData.forEach((r,idx)=>{
       const total=r.cuota+r.mora+r.extra+r.retro+(r.acuerdo||0)+r.saldo;
       hist2.push({num:numBase+idx,fecha:fecha,apto:r.apto,cliente:r.apto+' '+(r.prop||''),concepto:concepto,total:total});
