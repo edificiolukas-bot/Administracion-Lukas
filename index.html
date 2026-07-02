@@ -2336,7 +2336,7 @@ function cargarSaldosMasivo(){
   // Mapa de aptos existentes normalizado -> clave real
   const claveReal={};
   Object.keys(padron).forEach(function(k){claveReal[norm(k)]=k;});
-  let ok=0, noEncontrados=[];
+  let ok=0, noEncontrados=[], detalleCarga=[];
   const parseNum=function(v){
     if(v==null)return 0;
     const n=parseFloat(String(v).replace(/[^0-9.-]/g,''));
@@ -2361,6 +2361,8 @@ function cargarSaldosMasivo(){
     d.saJuridico=parseNum(cols[7]);
     d.saAscensor=parseNum(cols[8]);
     padron[clave]=d;
+    const totalApto=d.saOrdinaria+d.saExtra2023+d.saExtra2025+d.saIntereses+d.saRetro+d.saAcuerdo+d.saJuridico+d.saAscensor;
+    detalleCarga.push({apto:clave,total:totalApto});
     ok++;
   });
   S.set('padron',padron);
@@ -2371,6 +2373,14 @@ function cargarSaldosMasivo(){
     let html='<div style="background:#e6f7ec;border:1.5px solid #16a34a;border-radius:8px;padding:10px;color:#0a6b30">✅ Saldos cargados en '+ok+' apartamentos.</div>';
     if(noEncontrados.length){
       html+='<div style="background:#fff4e5;border:1.5px solid #f0a020;border-radius:8px;padding:10px;color:#8a5a00;margin-top:8px">⚠️ No se encontraron en el padrón: '+noEncontrados.join(', ')+'. Verifica que estén registrados con el mismo número.</div>';
+    }
+    // Diagnóstico: mostrar total cargado por apto para verificar
+    if(detalleCarga.length){
+      html+='<div style="margin-top:10px;font-size:12px;max-height:200px;overflow-y:auto;border:1px solid #ccc;border-radius:6px;padding:8px"><strong>Verificación de lo cargado:</strong>';
+      detalleCarga.forEach(function(dc){
+        html+='<div style="padding:2px 0;'+(dc.total===0?'color:#c0392b':'')+'">Apto '+dc.apto+': total saldo anterior $'+fmt(dc.total)+(dc.total===0?' ⚠️ (revisar)':'')+'</div>';
+      });
+      html+='</div>';
     }
     res.innerHTML=html;
   }
