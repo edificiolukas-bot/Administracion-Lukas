@@ -2654,9 +2654,11 @@ function buildCuentaMasiva(r, num){
     <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:10px">
       <thead><tr style="background:#1a3fa0;color:#fff"><th style="padding:6px 10px;text-align:left;width:70%">Concepto</th><th style="padding:6px 10px;text-align:right;width:30%">Valor</th></tr></thead>
       <tbody>${items}</tbody>
-      <tfoot><tr style="background:#1a3fa0;color:#fff;font-weight:700"><td style="padding:7px 12px;width:70%">TOTAL A PAGAR</td><td style="padding:7px 12px;text-align:right;border-left:1px solid rgba(255,255,255,.3);width:30%;white-space:nowrap">$${fmt(total)}</td></tr></tfoot>
+      <tfoot><tr style="background:${total<=0?'#0a6b30':'#1a3fa0'};color:#fff;font-weight:700"><td style="padding:7px 12px;width:70%">TOTAL A PAGAR</td><td style="padding:7px 12px;text-align:right;border-left:1px solid rgba(255,255,255,.3);width:30%;white-space:nowrap">$${fmt(total>0?total:0)}</td></tr></tfoot>
     </table>
-    <div style="font-size:10px;color:#444;margin:8px 0;font-style:italic">Valor en letras: ${numeroALetras(Math.round(total))} PESOS M/CTE</div>
+    ${total<=0?`<div style="text-align:center;margin:10px 0"><span style="display:inline-block;border:3px solid #0a6b30;color:#0a6b30;font-weight:900;font-size:16px;padding:6px 24px;border-radius:6px;transform:rotate(-4deg);letter-spacing:2px">PAZ Y SALVO</span></div>`:''}
+    ${total<0?`<div style="font-size:11px;color:#0a6b30;text-align:center;margin:6px 0;font-weight:600">Su apartamento presenta un saldo a favor de $${fmt(Math.abs(total))}, que será aplicado a la siguiente facturación.</div>`:''}
+    <div style="font-size:10px;color:#444;margin:8px 0;font-style:italic">Valor en letras: ${numeroALetras(Math.round(total>0?total:0))} PESOS M/CTE</div>
     ${(r.pagos&&r.pagos.length)?`<div style="font-size:10px;color:#0a6b30;border:1px solid #9fd3b4;background:#f0faf4;padding:7px 9px;margin:8px 0"><strong>Detalle de abonos recibidos:</strong><br>${r.pagos.map(function(p){return '• '+(p.fecha?fmtDate(p.fecha):'')+(p.concepto?' — '+p.concepto:'')+': $'+fmt(p.valor);}).join('<br>')}<br><strong>Total abonos: $${fmt(r.totalPagado||0)}</strong> (ya descontados del total a pagar).</div>`:''}
     ${r.obs?`<div style="font-size:10px;color:#333;border:1px solid #bbb;padding:6px 9px;margin:8px 0"><strong>Observaciones:</strong> ${r.obs}</div>`:''}
     <div style="font-size:10px;color:#333;border:1px solid #bbb;padding:7px 9px;margin:10px 0">Recuerde realizar su pago únicamente a la <strong>Cuenta de Ahorros Davivienda No. 0270-0004-9034</strong> a nombre de Edificio Lukas – NIT 900.457.679-7.</div>
