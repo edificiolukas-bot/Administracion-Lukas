@@ -363,7 +363,13 @@ table.tbl tr:active td{background:var(--blue-light)}
       <div class="field"><label>N° de la primera cuenta</label><input id="mas-num-inicio" type="number" inputmode="numeric" oninput="saveMasNumInicio()" placeholder="1680"></div>
       <div class="field"><label>Cuotas ordinarias causadas antes de este mes</label><input id="mas-cuotas-causadas" type="number" inputmode="numeric" value="1" min="0" placeholder="1"></div>
     </div>
-    <p style="font-size:12px;color:var(--text3);margin:2px 0 10px">Para julio: pon <strong>1</strong> (la cuota de junio ya causada). La cuota del mes actual se agrega automáticamente aparte. El saldo del padrón ya incluye mayo.</p>
+    <p style="font-size:12px;color:var(--text3);margin:2px 0 10px">Para julio: pon <strong>1</strong> (la cuota de junio ya causada). Para junio: pon <strong>0</strong>. La cuota del mes actual se agrega automáticamente aparte. El saldo del padrón ya incluye mayo.</p>
+    <div style="background:#fff8ee;border:1px solid #f0c674;border-radius:8px;padding:10px 12px;margin:6px 0 12px">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#8a5a00">
+        <input type="checkbox" id="mas-sin-pagos" style="width:18px;height:18px">
+        <span><strong>No aplicar pagos en esta facturación.</strong> Actívalo solo para regenerar meses anteriores (ej. junio) tal como se entregaron, sin restar abonos. Para julio déjalo desmarcado.</span>
+      </label>
+    </div>
     <p style="font-size:12px;color:var(--text3);margin:2px 0 10px">Las cuentas se numerarán consecutivamente desde este número. Se sincroniza con el consecutivo general.</p>
     <div class="btn-group">
       <button class="btn btn-primary" onclick="cargarMasiva()">Cargar apartamentos del padrón</button>
@@ -2628,15 +2634,18 @@ function cargarMasiva(){
       return{fecha:p.fecha||'',concepto:p.concepto||'Abono',valor:parseFloat(p.valor||0)};
     });
   });
-  // Cuotas ordinarias causadas antes del mes actual (para julio = 1, que es junio)
+  // Cuotas ordinarias causadas antes del mes actual (para julio = 1, que es junio; para junio = 0)
   const cuotasCausadas=parseInt((document.getElementById('mas-cuotas-causadas')||{}).value)||0;
+  // Opción: no aplicar pagos (para regenerar meses anteriores como se entregaron)
+  const sinPagos=(document.getElementById('mas-sin-pagos')||{}).checked;
   masivaData=aptos.map(a=>{
     const d=padron[a];
     // Motor: calcula los 8 conceptos aplicando los pagos por concepto (sin concepto -> ordinaria)
-    // La cartera ordinaria acumula las cuotas causadas anteriores (ej. junio)
-    const sa=calcularSaldosConcepto(d, pagosPorApto[a]||[], cuotasCausadas);
+    // Si sinPagos está activo, no se restan los abonos (se pasa lista vacía)
+    const pagosParaMotor=sinPagos?[]:(pagosPorApto[a]||[]);
+    const sa=calcularSaldosConcepto(d, pagosParaMotor, cuotasCausadas);
     const totalSaldoAnterior=sa.ordinaria+sa.extra2023+sa.extra2025+sa.intereses+sa.retro+sa.acuerdo+sa.juridico+sa.ascensor;
-    return{apto:d.apto,prop:d.prop,nit:d.nit,dir:d.dir,cuota:d.cuota,mora:0,extra:0,retro:0,acuerdo:0,saldo:Math.round(totalSaldoAnterior),saldosDetalle:sa,aFavor:sa._aFavor||0,obs:'',pagos:pagosPorApto[a]||[],totalPagado:Math.round(pagadoPorApto[a]||0)};
+    return{apto:d.apto,prop:d.prop,nit:d.nit,dir:d.dir,cuota:d.cuota,mora:0,extra:0,retro:0,acuerdo:0,saldo:Math.round(totalSaldoAnterior),saldosDetalle:sa,aFavor:sa._aFavor||0,obs:'',pagos:sinPagos?[]:(pagosPorApto[a]||[]),totalPagado:sinPagos?0:Math.round(pagadoPorApto[a]||0)};
   });
   document.getElementById('mas-tabla-card').style.display='block';
   renderMasivaTabla();
