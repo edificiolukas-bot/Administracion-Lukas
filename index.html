@@ -273,6 +273,13 @@ table.tbl tr:active td{background:var(--blue-light)}
   </div>
   <div class="card">
     <h2>Historial de cuentas</h2>
+    <div style="background:#f8f9fc;border:1px solid #dde3ef;border-radius:8px;padding:12px;margin-bottom:14px">
+      <p style="font-size:13px;color:var(--text3);margin-bottom:10px">Gestión del historial. Usa "Respaldar" antes de borrar, por seguridad.</p>
+      <div class="btn-group" style="flex-wrap:wrap">
+        <button class="btn btn-outline btn-sm" onclick="exportarCuentasCC()">💾 Respaldar cuentas (descargar)</button>
+        <button class="btn btn-sm" style="background:#c0392b;color:#fff" onclick="borrarTodasCuentasCC()">🗑️ Borrar TODO el historial</button>
+      </div>
+    </div>
     <div class="tbl-wrap"><table class="tbl"><thead><tr><th>N°</th><th>Fecha</th><th>Cliente</th><th>Concepto</th><th>Total</th><th></th></tr></thead>
     <tbody id="cc-historial"></tbody></table></div>
   </div>
@@ -1159,6 +1166,50 @@ function editarCC(i){
   if(numSpan){numSpan.textContent=h.num||'—';}
   document.querySelector('.main').scrollTop=0;
   showToast('Editando cuenta N° '+h.num+'. Corrige y toca Guardar.');
+}
+
+function exportarCuentasCC(){
+  const cuentas=S.get('cc_hist')||[];
+  if(!cuentas.length){showToast('No hay cuentas para respaldar');return;}
+  // Generar un texto legible + JSON para respaldo
+  let txt='RESPALDO DE CUENTAS DE COBRO - EDIFICIO LUKAS\n';
+  txt+='Fecha de respaldo: '+new Date().toLocaleString('es-CO')+'\n';
+  txt+='Total de cuentas: '+cuentas.length+'\n';
+  txt+='='.repeat(60)+'\n\n';
+  cuentas.forEach(function(c){
+    txt+='N° '+(c.num||'?')+' | '+(c.fecha||'')+' | '+(c.apto||c.cliente||'')+'\n';
+    txt+='  Concepto: '+(c.concepto||'')+'\n';
+    txt+='  Total: $'+fmt(c.total||0)+'\n\n';
+  });
+  txt+='\n\n--- DATOS COMPLETOS (JSON, no borrar) ---\n';
+  txt+=JSON.stringify(cuentas);
+  // Descargar como archivo
+  const blob=new Blob([txt],{type:'text/plain;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download='respaldo_cuentas_lukas_'+new Date().toISOString().slice(0,10)+'.txt';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Respaldo descargado ('+cuentas.length+' cuentas)');
+}
+
+function borrarTodasCuentasCC(){
+  const cuentas=S.get('cc_hist')||[];
+  if(!cuentas.length){showToast('El historial ya está vacío');return;}
+  // Primera confirmación
+  if(!confirm('⚠️ Vas a BORRAR TODAS las '+cuentas.length+' cuentas del historial.\n\nEsto es para eliminar las cuentas duplicadas (INI y junio). El saldo del padrón y los pagos NO se borran.\n\n¿Descargaste el respaldo primero?\n\nToca Aceptar solo si ya respaldaste.')){
+    return;
+  }
+  // Segunda confirmación
+  if(!confirm('CONFIRMACIÓN FINAL:\n\n¿Seguro que quieres borrar las '+cuentas.length+' cuentas del historial? Esta acción no se puede deshacer.')){
+    return;
+  }
+  S.set('cc_hist',[]);
+  renderCCHistorial();
+  showToast('Historial de cuentas borrado. Ahora puedes generar julio limpio.');
 }
 
 function renderCCHistorial(){
@@ -2270,7 +2321,7 @@ function aplicarBloqueosConsulta(){
   const permitidas=['goto','closemodal','document','verapto','veracta','vercom',
     'generarinforme','imprimirinforme','exportarinformecsv','exportgastos',
     'previewcc','printcom','printultimocom','printasamblea','calcquorum',
-    'renderpagos','rendergastos','entrarconsulta','validaradmin','mostrarloginadmin','previewmasiva','imprimirmasiva','cargarmasiva','cargarapto','verproveedor','imprimiregreso','importarrespaldo','cargardatospadronenpago','imprimirrecibo','calcularcartera','exportarcartera','imprimircartera','imprimirtodosrecibos','generarrespaldotexto','copiarrespaldotexto','restaurarrespaldotexto','descargarcomopdf','cancelaredicioncc','savemasnuminicio','initmasnuminicio','mostrarpendientesapto','cargarsaldosmasivo',];
+    'renderpagos','rendergastos','entrarconsulta','validaradmin','mostrarloginadmin','previewmasiva','imprimirmasiva','cargarmasiva','cargarapto','verproveedor','imprimiregreso','importarrespaldo','cargardatospadronenpago','imprimirrecibo','calcularcartera','exportarcartera','imprimircartera','imprimirtodosrecibos','generarrespaldotexto','copiarrespaldotexto','restaurarrespaldotexto','descargarcomopdf','cancelaredicioncc','savemasnuminicio','initmasnuminicio','mostrarpendientesapto','cargarsaldosmasivo','exportarcuentascc','borrartodascuentascc',];
   document.querySelectorAll('button').forEach(b=>{
     if(b.id==='logout-btn')return;
     const oc=(b.getAttribute('onclick')||'').toLowerCase();
