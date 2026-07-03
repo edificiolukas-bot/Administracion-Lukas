@@ -2589,9 +2589,17 @@ function cargarMasiva(){
   });
   document.getElementById('mas-tabla-card').style.display='block';
   renderMasivaTabla();
-  const conSaldo=Object.values(facturadoPorApto).filter(function(v){return v>0;}).length;
+  const conSaldo=masivaData.filter(function(r){return r.saldo>0;}).length;
   const conPagos=Object.values(pagosPorApto).filter(function(v){return v&&v.length>0;}).length;
+  const sinCuota=masivaData.filter(function(r){return !r.cuota||r.cuota<=0;});
   showToast(aptos.length+' apartamentos cargados. '+conSaldo+' con saldo anterior, '+conPagos+' con pagos aplicados.');
+  // Aviso si hay apartamentos SIN cuota mensual (causaría total incorrecto)
+  if(sinCuota.length){
+    const lista=sinCuota.map(function(r){return r.apto;}).join(', ');
+    setTimeout(function(){
+      alert('⚠️ ATENCIÓN: '+sinCuota.length+' apartamento(s) no tienen cuota ordinaria en el Padrón: '+lista+'.\n\nSu cuenta de julio saldrá incompleta. Ve al Padrón y agrégales la cuota mensual antes de facturar.');
+    },600);
+  }
 }
 
 function renderMasivaTabla(){
