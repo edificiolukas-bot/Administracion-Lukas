@@ -504,7 +504,7 @@ table.tbl tr:active td{background:var(--blue-light)}
       <div class="field"><label>Beneficiario (a quién se paga)</label><input id="gst-desc" placeholder="Seguridad Nápoles Ltda."></div>
       <div class="field"><label>NIT / Cédula beneficiario</label><input id="gst-nit" placeholder="900.xxx.xxx-x"></div>
       <div class="field"><label>Categoría</label>
-        <select id="gst-cat"><option>Seguridad</option><option>Mantenimiento</option><option>Servicios públicos</option><option>Administración</option><option>Reparaciones</option><option>Seguros</option><option>Otro</option></select>
+        <select id="gst-cat"><option>Seguridad/Aseo</option><option>Insumos/Compras</option><option>Seguros</option><option>Mantenimiento</option><option>Reparaciones</option><option>Servicios Públicos</option><option>Administración</option><option>Honorarios</option><option>Otro</option></select>
       </div>
       <div class="field"><label>Valor ($)</label><input id="gst-valor" type="number" inputmode="numeric" placeholder="0"></div>
       <div class="field"><label>N° factura / soporte</label><input id="gst-factura" placeholder="FAC-001"></div>
@@ -547,7 +547,7 @@ table.tbl tr:active td{background:var(--blue-light)}
       <div class="field"><label>Empresa / Persona</label><input id="pv-nombre" placeholder="Seguridad Nápoles Ltda."></div>
       <div class="field"><label>NIT / Cédula</label><input id="pv-nit" placeholder="900.xxx.xxx-x"></div>
       <div class="field"><label>Servicio</label>
-        <select id="pv-servicio"><option>Seguridad</option><option>Aseo</option><option>Mantenimiento</option><option>Ascensores</option><option>Jurídico</option><option>Contabilidad</option><option>Servicios públicos</option><option>Seguros</option><option>Otro</option></select>
+        <select id="pv-servicio"><option>Seguridad/Aseo</option><option>Insumos/Compras</option><option>Seguros</option><option>Mantenimiento</option><option>Reparaciones</option><option>Servicios Públicos</option><option>Administración</option><option>Honorarios</option><option>Otro</option></select>
       </div>
       <div class="field"><label>Persona de contacto</label><input id="pv-contacto" placeholder="Nombre del representante"></div>
       <div class="field"><label>Teléfono</label><input id="pv-tel" placeholder="310 000 0000" inputmode="tel"></div>
@@ -1708,11 +1708,37 @@ function renderProveedorSelect(){
 
 function savePagoProveedor(){
   const pagos=S.get('pagos_prov')||[];
-  pagos.push({proveedor:gv('pvp-proveedor'),concepto:gv('pvp-concepto'),
-    valor:parseFloat(gv('pvp-valor'))||0,fecha:gv('pvp-fecha')||today(),
-    factura:gv('pvp-factura'),fpago:gv('pvp-fpago')});
+  const prov=gv('pvp-proveedor');
+  const concepto=gv('pvp-concepto');
+  const valor=parseFloat(gv('pvp-valor'))||0;
+  const fecha=gv('pvp-fecha')||today();
+  const factura=gv('pvp-factura');
+  const fpago=gv('pvp-fpago');
+  pagos.push({proveedor:prov,concepto:concepto,valor:valor,fecha:fecha,factura:factura,fpago:fpago});
   S.set('pagos_prov',pagos);
-  renderPagosProveedor();renderCxP();showToast('Pago a proveedor registrado');
+  // GENERAR comprobante de egreso automáticamente
+  const g=S.get('gastos')||[];
+  const numEgreso=parseInt(S.get('egreso_num'))||3162;
+  // Buscar datos del proveedor (NIT, categoría) si existen
+  const provs=S.get('proveedores')||[];
+  const norm=function(x){return String(x==null?'':x).trim().toUpperCase();};
+  const datosP=provs.find(function(p){return norm(p.nombre)===norm(prov);})||{};
+  const egreso={
+    num:String(numEgreso),fecha:fecha,cat:datosP.servicio||'Proveedores',
+    desc:'Pago a '+prov+(concepto?' - '+concepto:''),nit:datosP.nit||'',valor:valor,
+    factura:factura,fpago:fpago,banco:datosP.banco||'',cheque:'',concepto:concepto,
+    obs:'Generado automáticamente desde pago a proveedor'
+  };
+  g.push(egreso);
+  S.set('gastos',g);
+  S.set('egreso_num',numEgreso+1);
+  // Actualizar el campo visible del consecutivo de egreso si está en pantalla
+  var egNumField=document.getElementById('gst-num');
+  if(egNumField)egNumField.value=numEgreso+1;
+  renderPagosProveedor();renderCxP();
+  if(typeof renderGastos==='function')renderGastos();
+  if(typeof renderGstStats==='function')renderGstStats();
+  showToast('Pago registrado + comprobante de egreso N° '+numEgreso+' generado');
   ['pvp-concepto','pvp-valor','pvp-factura'].forEach(id=>{var e=document.getElementById(id);if(e)e.value='';});
 }
 
