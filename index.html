@@ -479,6 +479,9 @@ table.tbl tr:active td{background:var(--blue-light)}
 
   <div class="card">
     <h2>Detalle de cartera por apartamento</h2>
+    <div class="btn-group" style="margin-bottom:12px">
+      <button class="btn btn-outline btn-sm" onclick="exportarEstadoCartera()">🖨️ Imprimir / PDF del estado de cartera</button>
+    </div>
     <div class="tbl-wrap"><table class="tbl">
       <thead><tr><th>Apto</th><th>Propietario</th><th>Facturado</th><th>Pagado</th><th>Saldo capital</th><th>Mora</th><th>Total adeudado</th></tr></thead>
       <tbody id="ec-tabla"></tbody>
@@ -637,9 +640,13 @@ table.tbl tr:active td{background:var(--blue-light)}
       <div class="field"><label>Fecha de pago</label><input id="pvp-fecha" type="date"></div>
       <div class="field"><label>N° factura</label><input id="pvp-factura" placeholder="FAC-001"></div>
       <div class="field"><label>Forma de pago</label>
-        <select id="pvp-fpago"><option>Transferencia</option><option>Efectivo</option><option>Cheque</option></select>
+        <select id="pvp-fpago"><option>Transferencia</option><option>Efectivo</option><option>Cheque</option><option>Datáfono</option><option>PSE</option><option>Nequi</option></select>
+      </div>
+      <div class="field"><label>Rubro / Categoría (si el proveedor no está registrado)</label>
+        <select id="pvp-rubro"><option value="">— Automático del proveedor —</option><option>Seguridad/Aseo</option><option>Insumos/Compras</option><option>Seguros</option><option>Mantenimiento</option><option>Reparaciones</option><option>Servicios Públicos</option><option>Administración</option><option>Honorarios</option><option>Otro</option></select>
       </div>
     </div>
+    <p style="font-size:12px;color:var(--text3);margin:2px 0 10px">Al registrar el pago se genera automáticamente el comprobante de egreso. No necesitas registrar la factura por separado.</p>
     <div class="btn-group"><button class="btn btn-primary" onclick="savePagoProveedor()">Registrar pago</button></div>
   </div>
 
@@ -1218,6 +1225,33 @@ function borrarTodasCuentasCC(){
   showToast('Historial de cuentas borrado. Ahora puedes generar julio limpio.');
 }
 
+function verCuentaGuardada(i){
+  const hist=S.get('cc_hist')||[];
+  const h=hist[i];
+  if(!h){showToast('No se encontró la cuenta');return;}
+  // Reconstruir el objeto que espera buildCuentaMasiva
+  const r={
+    apto:h.apto,prop:h.prop||'',nit:h.nit||'',dir:h.dir||'',
+    cuota:h.cuota||0,mora:0,extra:0,retro:0,acuerdo:0,
+    saldo:0,saldosDetalle:h.saldosDetalle||{},
+    pagos:h.pagos||[],totalPagado:h.totalPagado||0,obs:''
+  };
+  // Guardar temporalmente el concepto y fechas para que buildCuentaMasiva los use
+  const concInput=document.getElementById('mas-concepto');
+  const fechaInput=document.getElementById('mas-fecha');
+  const venceInput=document.getElementById('mas-vence');
+  const _c=concInput?concInput.value:'', _f=fechaInput?fechaInput.value:'', _v=venceInput?venceInput.value:'';
+  if(concInput)concInput.value=h.concepto||'';
+  if(fechaInput)fechaInput.value=h.fecha||'';
+  if(venceInput)venceInput.value=h.vence||'';
+  const htmlCuenta=buildCuentaMasiva(r, h.num);
+  // Restaurar los valores originales
+  if(concInput)concInput.value=_c;
+  if(fechaInput)fechaInput.value=_f;
+  if(venceInput)venceInput.value=_v;
+  mostrarOverlayImpresion('<div class="zona-impresion">'+htmlCuenta+'</div>');
+}
+
 function renderCCHistorial(){
   const hist=S.get('cc_hist')||[];
   const tb=document.getElementById('cc-historial');
@@ -1226,6 +1260,7 @@ function renderCCHistorial(){
     const i=hist.length-1-ri;
     return`<tr><td><strong>${h.num}</strong></td><td>${h.fecha}</td><td>${h.cliente||'—'}</td><td>${h.concepto||'—'}</td>
     <td>$${fmt(h.total)}</td><td style="display:flex;gap:6px">
+    <button class="btn btn-sm" style="background:#16a34a;color:#fff" onclick="verCuentaGuardada(${i})">Ver/PDF</button>
     <button class="btn btn-sm btn-outline" onclick="editarCC(${i})">Editar</button>
     <button class="btn btn-sm btn-danger" onclick="delCCHist(${i})">×</button></td></tr>`;
   }).join('');
@@ -1714,17 +1749,25 @@ function savePagoProveedor(){
   const fecha=gv('pvp-fecha')||today();
   const factura=gv('pvp-factura');
   const fpago=gv('pvp-fpago');
-  pagos.push({proveedor:prov,concepto:concepto,valor:valor,fecha:fecha,factura:factura,fpago:fpago});
-  S.set('pagos_prov',pagos);
-  // GENERAR comprobante de egreso automáticamente
-  const g=S.get('gastos')||[];
-  const numEgreso=parseInt(S.get('egreso_num'))||3162;
-  // Buscar datos del proveedor (NIT, categoría) si existen
+  if(!prov){showToast('Selecciona o escribe el proveedor');return;}
+  if(valor<=0){showToast('Ingresa el valor pagado');return;}
   const provs=S.get('proveedores')||[];
   const norm=function(x){return String(x==null?'':x).trim().toUpperCase();};
   const datosP=provs.find(function(p){return norm(p.nombre)===norm(prov);})||{};
+  // Rubro: del proveedor, o el que se haya elegido en el formulario, o genérico
+  const rubro=datosP.servicio||gv('pvp-rubro')||'Otro';
+  // 1) Crear la FACTURA automáticamente (para que el pago quede aplicado, sin registrarla antes)
+  const facturas=S.get('facturas_prov')||[];
+  facturas.push({proveedor:prov,concepto:concepto||'Pago de servicios',valor:valor,fecha:fecha,factura:factura,rubro:rubro});
+  S.set('facturas_prov',facturas);
+  // 2) Registrar el PAGO
+  pagos.push({proveedor:prov,concepto:concepto,valor:valor,fecha:fecha,factura:factura,fpago:fpago,rubro:rubro});
+  S.set('pagos_prov',pagos);
+  // 3) GENERAR comprobante de egreso automáticamente
+  const g=S.get('gastos')||[];
+  const numEgreso=parseInt(S.get('egreso_num'))||3162;
   const egreso={
-    num:String(numEgreso),fecha:fecha,cat:datosP.servicio||'Proveedores',
+    num:String(numEgreso),fecha:fecha,cat:rubro,
     desc:'Pago a '+prov+(concepto?' - '+concepto:''),nit:datosP.nit||'',valor:valor,
     factura:factura,fpago:fpago,banco:datosP.banco||'',cheque:'',concepto:concepto,
     obs:'Generado automáticamente desde pago a proveedor'
@@ -2353,7 +2396,7 @@ function aplicarBloqueosConsulta(){
   const permitidas=['goto','closemodal','document','verapto','veracta','vercom',
     'generarinforme','imprimirinforme','exportarinformecsv','exportgastos',
     'previewcc','printcom','printultimocom','printasamblea','calcquorum',
-    'renderpagos','rendergastos','entrarconsulta','validaradmin','mostrarloginadmin','previewmasiva','imprimirmasiva','cargarmasiva','cargarapto','verproveedor','imprimiregreso','importarrespaldo','cargardatospadronenpago','imprimirrecibo','calcularcartera','exportarcartera','imprimircartera','imprimirtodosrecibos','generarrespaldotexto','copiarrespaldotexto','restaurarrespaldotexto','descargarcomopdf','cancelaredicioncc','savemasnuminicio','initmasnuminicio','mostrarpendientesapto','cargarsaldosmasivo','exportarcuentascc','borrartodascuentascc',];
+    'renderpagos','rendergastos','entrarconsulta','validaradmin','mostrarloginadmin','previewmasiva','imprimirmasiva','cargarmasiva','cargarapto','verproveedor','imprimiregreso','importarrespaldo','cargardatospadronenpago','imprimirrecibo','calcularcartera','exportarcartera','imprimircartera','imprimirtodosrecibos','generarrespaldotexto','copiarrespaldotexto','restaurarrespaldotexto','descargarcomopdf','cancelaredicioncc','savemasnuminicio','initmasnuminicio','mostrarpendientesapto','cargarsaldosmasivo','exportarcuentascc','borrartodascuentascc','vercuentaguardada','exportarestadocartera',];
   document.querySelectorAll('button').forEach(b=>{
     if(b.id==='logout-btn')return;
     const oc=(b.getAttribute('onclick')||'').toLowerCase();
@@ -2847,7 +2890,7 @@ function guardarMasiva(){
     let numBase=parseInt(gv('mas-num-inicio'))||parseInt(S.get('cc_num')||1680);
     masivaData.forEach((r,idx)=>{
       const total=r.cuota+r.saldo;
-      hist2.push({num:numBase+idx,fecha:fecha,apto:r.apto,cliente:r.apto+' '+(r.prop||''),concepto:concepto,total:total});
+      hist2.push({num:numBase+idx,fecha:fecha,apto:r.apto,cliente:r.apto+' '+(r.prop||''),concepto:concepto,total:total,prop:r.prop,nit:r.nit,dir:r.dir,cuota:r.cuota,saldosDetalle:r.saldosDetalle,pagos:r.pagos,totalPagado:r.totalPagado,vence:gv('mas-vence')});
     });
     S.set('cc_hist',hist2);
     const nuevoNum=numBase+masivaData.length;
@@ -2875,6 +2918,52 @@ function guardarMasiva(){
 let carteraCalculada=[];
 
 // Calcula facturado, pagado y saldo por cada unidad
+function exportarEstadoCartera(){
+  if(!carteraCalculada||!carteraCalculada.length){showToast('Primero calcula la cartera');return;}
+  const conMov=carteraCalculada.filter(function(r){return r.facturado!==0||r.pagado!==0;});
+  const hoy=new Date().toLocaleDateString('es-CO');
+  let totF=0,totP=0,totS=0,totM=0,totT=0;
+  let filas='';
+  conMov.forEach(function(r){
+    totF+=r.facturado;totP+=r.pagado;totS+=r.saldoCapital;totM+=r.mora;totT+=r.total;
+    filas+='<tr><td style="padding:5px 8px;border-bottom:1px solid #e8e8e8">'+r.apto+'</td>'+
+      '<td style="padding:5px 8px;border-bottom:1px solid #e8e8e8;font-size:11px">'+(r.prop||'—')+'</td>'+
+      '<td style="padding:5px 8px;border-bottom:1px solid #e8e8e8;text-align:right">$'+fmt(r.facturado)+'</td>'+
+      '<td style="padding:5px 8px;border-bottom:1px solid #e8e8e8;text-align:right">$'+fmt(r.pagado)+'</td>'+
+      '<td style="padding:5px 8px;border-bottom:1px solid #e8e8e8;text-align:right;font-weight:700">$'+fmt(r.saldoCapital)+'</td>'+
+      (totM>0||r.mora>0?'<td style="padding:5px 8px;border-bottom:1px solid #e8e8e8;text-align:right">'+(r.mora>0?'$'+fmt(r.mora):'—')+'</td>':'')+
+      '<td style="padding:5px 8px;border-bottom:1px solid #e8e8e8;text-align:right;font-weight:700">$'+fmt(r.total)+'</td></tr>';
+  });
+  const hayMora=totM>0;
+  const html='<div class="zona-impresion" style="padding:20px;font-family:Arial,sans-serif;font-size:12px;color:#222">'+
+    '<div style="text-align:center;margin-bottom:16px">'+
+    '<div style="font-size:20px;font-weight:800;color:#1a3fa0">EDIFICIO LUKAS</div>'+
+    '<div style="font-size:11px;color:#555">NIT 900.457.679-7</div>'+
+    '<div style="font-size:16px;font-weight:700;margin-top:8px">Estado de Cartera por Apartamento</div>'+
+    '<div style="font-size:11px;color:#555">Generado el '+hoy+'</div></div>'+
+    '<table style="width:100%;border-collapse:collapse;font-size:11px">'+
+    '<thead><tr style="background:#1a3fa0;color:#fff">'+
+    '<th style="padding:6px 8px;text-align:left">Apto</th>'+
+    '<th style="padding:6px 8px;text-align:left">Propietario</th>'+
+    '<th style="padding:6px 8px;text-align:right">Facturado</th>'+
+    '<th style="padding:6px 8px;text-align:right">Pagado</th>'+
+    '<th style="padding:6px 8px;text-align:right">Saldo</th>'+
+    (hayMora?'<th style="padding:6px 8px;text-align:right">Mora</th>':'')+
+    '<th style="padding:6px 8px;text-align:right">Total</th></tr></thead>'+
+    '<tbody>'+filas+'</tbody>'+
+    '<tfoot><tr style="background:#eef2fb;font-weight:800">'+
+    '<td style="padding:7px 8px" colspan="2">TOTALES</td>'+
+    '<td style="padding:7px 8px;text-align:right">$'+fmt(totF)+'</td>'+
+    '<td style="padding:7px 8px;text-align:right">$'+fmt(totP)+'</td>'+
+    '<td style="padding:7px 8px;text-align:right">$'+fmt(totS)+'</td>'+
+    (hayMora?'<td style="padding:7px 8px;text-align:right">$'+fmt(totM)+'</td>':'')+
+    '<td style="padding:7px 8px;text-align:right">$'+fmt(totT)+'</td></tr></tfoot>'+
+    '</table>'+
+    '<div style="margin-top:14px;font-size:10px;color:#666">Documento informativo generado por la administración. Saldo = facturado menos pagado.</div>'+
+    '</div>';
+  mostrarOverlayImpresion(html);
+}
+
 function calcularCartera(sinMora){
   const cuentas=S.get('cc_hist')||[];
   const pagos=S.get('pagos')||[];
