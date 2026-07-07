@@ -980,36 +980,47 @@ function descargarComoPDF(){
   }
   const zona=document.getElementById('zona-impresion');
   if(!zona){showToast('No hay documento para exportar');return;}
-  // Verificar que la zona tenga contenido visible
   if(!zona.innerHTML||zona.offsetHeight<10){
     showToast('El documento aún se está preparando, espera un momento e intenta de nuevo');
     return;
   }
   showToast('Generando PDF, espera un momento...');
   const nombre='Lukas_documento_'+today()+'.pdf';
-  // Clonar la zona a un contenedor con ancho fijo para que html2canvas la capture bien en iPad
+  // Contenedor VISIBLE (necesario en iPad: html2canvas no captura elementos ocultos o fuera de pantalla).
+  // Se coloca sobre una capa que tapa la pantalla durante la captura, luego se elimina.
+  const capa=document.createElement('div');
+  capa.style.cssText='position:fixed;inset:0;background:rgba(255,255,255,0.98);z-index:200000;display:flex;align-items:flex-start;justify-content:center;overflow:auto';
   const wrapper=document.createElement('div');
-  wrapper.style.cssText='position:fixed;left:-9999px;top:0;width:800px;background:#fff;padding:16px;z-index:-1';
+  wrapper.style.cssText='width:780px;max-width:96%;background:#fff;padding:16px;box-sizing:border-box';
   wrapper.innerHTML=zona.innerHTML;
-  document.body.appendChild(wrapper);
+  const aviso=document.createElement('div');
+  aviso.textContent='Generando PDF...';
+  aviso.style.cssText='position:fixed;top:10px;left:50%;transform:translateX(-50%);background:#1a3fa0;color:#fff;padding:8px 18px;border-radius:20px;font-size:13px;z-index:200001';
+  capa.appendChild(wrapper);
+  document.body.appendChild(capa);
+  document.body.appendChild(aviso);
   const opciones={
     margin:[8,8,8,8],
     filename:nombre,
     image:{type:'jpeg',quality:0.98},
-    html2canvas:{scale:2,useCORS:true,logging:false,backgroundColor:'#ffffff',windowWidth:800},
+    html2canvas:{scale:2,useCORS:true,logging:false,backgroundColor:'#ffffff'},
     jsPDF:{unit:'mm',format:'letter',orientation:'portrait'},
     pagebreak:{mode:['css','legacy']}
   };
-  // Pequeña espera para asegurar el render antes de capturar
+  function limpiar(){
+    if(capa.parentNode)capa.parentNode.removeChild(capa);
+    if(aviso.parentNode)aviso.parentNode.removeChild(aviso);
+  }
+  // Esperar a que el navegador pinte el contenido visible antes de capturar
   setTimeout(function(){
     html2pdf().set(opciones).from(wrapper).save().then(function(){
       showToast('✅ PDF descargado: '+nombre);
-      if(wrapper.parentNode)wrapper.parentNode.removeChild(wrapper);
+      limpiar();
     }).catch(function(e){
       showToast('Error al generar PDF: '+(e.message||e));
-      if(wrapper.parentNode)wrapper.parentNode.removeChild(wrapper);
+      limpiar();
     });
-  },300);
+  },500);
 }
 
 function mostrarOverlayImpresion(htmlInterno){
