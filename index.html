@@ -634,7 +634,7 @@ table.tbl tr:active td{background:var(--blue-light)}
   <div class="card">
     <h2>Registrar pago a proveedor</h2>
     <div class="form-grid g3">
-      <div class="field"><label>Proveedor</label><select id="pvp-proveedor"></select></div>
+      <div class="field"><label>Proveedor</label><select id="pvp-proveedor" onchange="autocompletarProveedor()"></select></div>
       <div class="field"><label>Concepto</label><input id="pvp-concepto" placeholder="Abono / pago factura"></div>
       <div class="field"><label>Valor ($)</label><input id="pvp-valor" type="number" inputmode="numeric" placeholder="0"></div>
       <div class="field"><label>Fecha de pago</label><input id="pvp-fecha" type="date"></div>
@@ -980,22 +980,36 @@ function descargarComoPDF(){
   }
   const zona=document.getElementById('zona-impresion');
   if(!zona){showToast('No hay documento para exportar');return;}
+  // Verificar que la zona tenga contenido visible
+  if(!zona.innerHTML||zona.offsetHeight<10){
+    showToast('El documento aún se está preparando, espera un momento e intenta de nuevo');
+    return;
+  }
   showToast('Generando PDF, espera un momento...');
-  // Nombre del archivo con fecha
   const nombre='Lukas_documento_'+today()+'.pdf';
+  // Clonar la zona a un contenedor con ancho fijo para que html2canvas la capture bien en iPad
+  const wrapper=document.createElement('div');
+  wrapper.style.cssText='position:fixed;left:-9999px;top:0;width:800px;background:#fff;padding:16px;z-index:-1';
+  wrapper.innerHTML=zona.innerHTML;
+  document.body.appendChild(wrapper);
   const opciones={
     margin:[8,8,8,8],
     filename:nombre,
     image:{type:'jpeg',quality:0.98},
-    html2canvas:{scale:2,useCORS:true,logging:false},
+    html2canvas:{scale:2,useCORS:true,logging:false,backgroundColor:'#ffffff',windowWidth:800},
     jsPDF:{unit:'mm',format:'letter',orientation:'portrait'},
-    pagebreak:{mode:['avoid-all','css','legacy']}
+    pagebreak:{mode:['css','legacy']}
   };
-  html2pdf().set(opciones).from(zona).save().then(function(){
-    showToast('✅ PDF descargado: '+nombre);
-  }).catch(function(e){
-    showToast('Error al generar PDF: '+(e.message||e));
-  });
+  // Pequeña espera para asegurar el render antes de capturar
+  setTimeout(function(){
+    html2pdf().set(opciones).from(wrapper).save().then(function(){
+      showToast('✅ PDF descargado: '+nombre);
+      if(wrapper.parentNode)wrapper.parentNode.removeChild(wrapper);
+    }).catch(function(e){
+      showToast('Error al generar PDF: '+(e.message||e));
+      if(wrapper.parentNode)wrapper.parentNode.removeChild(wrapper);
+    });
+  },300);
 }
 
 function mostrarOverlayImpresion(htmlInterno){
@@ -1249,7 +1263,7 @@ function verCuentaGuardada(i){
   if(concInput)concInput.value=_c;
   if(fechaInput)fechaInput.value=_f;
   if(venceInput)venceInput.value=_v;
-  mostrarOverlayImpresion('<div class="zona-impresion">'+htmlCuenta+'</div>');
+  mostrarOverlayImpresion(htmlCuenta);
 }
 
 function renderCCHistorial(){
@@ -1741,6 +1755,42 @@ function renderProveedorSelect(){
   sel.innerHTML=p.map(x=>`<option>${x.nombre}</option>`).join('')||'<option>— sin proveedores —</option>';
 }
 
+function autocompletarProveedor(){
+  const prov=gv('pvp-proveedor');
+  const provs=S.get('proveedores')||[];
+  const norm=function(x){return String(x==null?'':x).trim().toUpperCase();};
+  const d=provs.find(function(p){return norm(p.nombre)===norm(prov);});
+  if(!d)return;
+  // Autocompletar el rubro/categoría con el servicio del proveedor
+  const rubroSel=document.getElementById('pvp-rubro');
+  if(rubroSel && d.servicio){
+    for(let i=0;i<rubroSel.options.length;i++){
+      if(rubroSel.options[i].value===d.servicio||rubroSel.options[i].text===d.servicio){
+        rubroSel.selectedIndex=i;break;
+      }
+    }
+  }
+  // Mostrar un panel con los datos del proveedor que se usarán
+  let panel=document.getElementById('pvp-datos-panel');
+  if(!panel){
+    panel=document.createElement('div');
+    panel.id='pvp-datos-panel';
+    panel.style.cssText='background:#eef6ff;border:1px solid #b3d4f5;border-radius:8px;padding:10px 12px;margin:8px 0;font-size:12px;color:#1a3fa0';
+    const sel=document.getElementById('pvp-proveedor');
+    if(sel&&sel.parentNode&&sel.parentNode.parentNode){
+      sel.parentNode.parentNode.parentNode.insertBefore(panel,sel.parentNode.parentNode.nextSibling);
+    }
+  }
+  if(panel){
+    panel.style.display='block';
+    panel.innerHTML='<strong>Datos que se cargarán:</strong> '+
+      (d.nit?'NIT '+d.nit:'sin NIT')+
+      (d.servicio?' · '+d.servicio:'')+
+      (d.banco?' · '+d.banco:'')+
+      (d.cuenta?' · Cta '+d.cuenta:'');
+  }
+}
+
 function savePagoProveedor(){
   const pagos=S.get('pagos_prov')||[];
   const prov=gv('pvp-proveedor');
@@ -1768,7 +1818,7 @@ function savePagoProveedor(){
   const numEgreso=parseInt(S.get('egreso_num'))||3162;
   const egreso={
     num:String(numEgreso),fecha:fecha,cat:rubro,
-    desc:'Pago a '+prov+(concepto?' - '+concepto:''),nit:datosP.nit||'',valor:valor,
+    desc:prov,nit:datosP.nit||'',valor:valor,
     factura:factura,fpago:fpago,banco:datosP.banco||'',cheque:'',concepto:concepto,
     obs:'Generado automáticamente desde pago a proveedor'
   };
@@ -2396,7 +2446,7 @@ function aplicarBloqueosConsulta(){
   const permitidas=['goto','closemodal','document','verapto','veracta','vercom',
     'generarinforme','imprimirinforme','exportarinformecsv','exportgastos',
     'previewcc','printcom','printultimocom','printasamblea','calcquorum',
-    'renderpagos','rendergastos','entrarconsulta','validaradmin','mostrarloginadmin','previewmasiva','imprimirmasiva','cargarmasiva','cargarapto','verproveedor','imprimiregreso','importarrespaldo','cargardatospadronenpago','imprimirrecibo','calcularcartera','exportarcartera','imprimircartera','imprimirtodosrecibos','generarrespaldotexto','copiarrespaldotexto','restaurarrespaldotexto','descargarcomopdf','cancelaredicioncc','savemasnuminicio','initmasnuminicio','mostrarpendientesapto','cargarsaldosmasivo','exportarcuentascc','borrartodascuentascc','vercuentaguardada','exportarestadocartera',];
+    'renderpagos','rendergastos','entrarconsulta','validaradmin','mostrarloginadmin','previewmasiva','imprimirmasiva','cargarmasiva','cargarapto','verproveedor','imprimiregreso','importarrespaldo','cargardatospadronenpago','imprimirrecibo','calcularcartera','exportarcartera','imprimircartera','imprimirtodosrecibos','generarrespaldotexto','copiarrespaldotexto','restaurarrespaldotexto','descargarcomopdf','cancelaredicioncc','savemasnuminicio','initmasnuminicio','mostrarpendientesapto','cargarsaldosmasivo','exportarcuentascc','borrartodascuentascc','vercuentaguardada','exportarestadocartera','autocompletarproveedor',];
   document.querySelectorAll('button').forEach(b=>{
     if(b.id==='logout-btn')return;
     const oc=(b.getAttribute('onclick')||'').toLowerCase();
@@ -2935,7 +2985,7 @@ function exportarEstadoCartera(){
       '<td style="padding:5px 8px;border-bottom:1px solid #e8e8e8;text-align:right;font-weight:700">$'+fmt(r.total)+'</td></tr>';
   });
   const hayMora=totM>0;
-  const html='<div class="zona-impresion" style="padding:20px;font-family:Arial,sans-serif;font-size:12px;color:#222">'+
+  const html='<div style="padding:20px;font-family:Arial,sans-serif;font-size:12px;color:#222">'+
     '<div style="text-align:center;margin-bottom:16px">'+
     '<div style="font-size:20px;font-weight:800;color:#1a3fa0">EDIFICIO LUKAS</div>'+
     '<div style="font-size:11px;color:#555">NIT 900.457.679-7</div>'+
