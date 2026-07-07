@@ -276,6 +276,7 @@ table.tbl tr:active td{background:var(--blue-light)}
     <div style="background:#f8f9fc;border:1px solid #dde3ef;border-radius:8px;padding:12px;margin-bottom:14px">
       <p style="font-size:13px;color:var(--text3);margin-bottom:10px">Gestión del historial. Usa "Respaldar" antes de borrar, por seguridad.</p>
       <div class="btn-group" style="flex-wrap:wrap">
+        <button class="btn btn-success btn-sm" onclick="descargarLotePDF()">📄 Descargar todas en PDF (por mes)</button>
         <button class="btn btn-outline btn-sm" onclick="exportarCuentasCC()">💾 Respaldar cuentas (descargar)</button>
         <button class="btn btn-sm" style="background:#c0392b;color:#fff" onclick="borrarTodasCuentasCC()">🗑️ Borrar TODO el historial</button>
       </div>
@@ -1248,6 +1249,51 @@ function borrarTodasCuentasCC(){
   S.set('cc_hist',[]);
   renderCCHistorial();
   showToast('Historial de cuentas borrado. Ahora puedes generar julio limpio.');
+}
+
+function descargarLotePDF(){
+  const hist=S.get('cc_hist')||[];
+  if(!hist.length){showToast('No hay cuentas en el historial');return;}
+  // Agrupar por concepto (mes)
+  const meses={};
+  hist.forEach(function(h){
+    const m=h.concepto||'Sin concepto';
+    if(!meses[m])meses[m]=[];
+    meses[m].push(h);
+  });
+  const listaMeses=Object.keys(meses);
+  // Si hay varios meses, preguntar cuál; si hay uno solo, usarlo
+  let mesSel;
+  if(listaMeses.length===1){
+    mesSel=listaMeses[0];
+  }else{
+    let opciones=listaMeses.map(function(m,i){return (i+1)+'. '+m+' ('+meses[m].length+' cuentas)';}).join('\n');
+    const resp=prompt('¿Qué lote quieres descargar? Escribe el número:\n\n'+opciones);
+    if(!resp)return;
+    const idx=parseInt(resp)-1;
+    if(idx<0||idx>=listaMeses.length){showToast('Opción no válida');return;}
+    mesSel=listaMeses[idx];
+  }
+  const cuentas=meses[mesSel];
+  // Reconstruir el HTML de todas las cuentas del mes
+  const concInput=document.getElementById('mas-concepto');
+  const fechaInput=document.getElementById('mas-fecha');
+  const venceInput=document.getElementById('mas-vence');
+  const _c=concInput?concInput.value:'', _f=fechaInput?fechaInput.value:'', _v=venceInput?venceInput.value:'';
+  let html='<div class="lote-wrap">';
+  cuentas.forEach(function(h){
+    const r={apto:h.apto,prop:h.prop||'',nit:h.nit||'',dir:h.dir||'',cuota:h.cuota||0,mora:0,extra:0,retro:0,acuerdo:0,saldo:0,saldosDetalle:h.saldosDetalle||{},pagos:h.pagos||[],totalPagado:h.totalPagado||0,obs:''};
+    if(concInput)concInput.value=h.concepto||'';
+    if(fechaInput)fechaInput.value=h.fecha||'';
+    if(venceInput)venceInput.value=h.vence||'';
+    html+=buildCuentaMasiva(r,h.num);
+  });
+  html+='</div>';
+  if(concInput)concInput.value=_c;
+  if(fechaInput)fechaInput.value=_f;
+  if(venceInput)venceInput.value=_v;
+  mostrarOverlayImpresion(html);
+  showToast('Lote de '+cuentas.length+' cuentas listo. Toca Descargar PDF.');
 }
 
 function verCuentaGuardada(i){
@@ -2457,7 +2503,7 @@ function aplicarBloqueosConsulta(){
   const permitidas=['goto','closemodal','document','verapto','veracta','vercom',
     'generarinforme','imprimirinforme','exportarinformecsv','exportgastos',
     'previewcc','printcom','printultimocom','printasamblea','calcquorum',
-    'renderpagos','rendergastos','entrarconsulta','validaradmin','mostrarloginadmin','previewmasiva','imprimirmasiva','cargarmasiva','cargarapto','verproveedor','imprimiregreso','importarrespaldo','cargardatospadronenpago','imprimirrecibo','calcularcartera','exportarcartera','imprimircartera','imprimirtodosrecibos','generarrespaldotexto','copiarrespaldotexto','restaurarrespaldotexto','descargarcomopdf','cancelaredicioncc','savemasnuminicio','initmasnuminicio','mostrarpendientesapto','cargarsaldosmasivo','exportarcuentascc','borrartodascuentascc','vercuentaguardada','exportarestadocartera','autocompletarproveedor',];
+    'renderpagos','rendergastos','entrarconsulta','validaradmin','mostrarloginadmin','previewmasiva','imprimirmasiva','cargarmasiva','cargarapto','verproveedor','imprimiregreso','importarrespaldo','cargardatospadronenpago','imprimirrecibo','calcularcartera','exportarcartera','imprimircartera','imprimirtodosrecibos','generarrespaldotexto','copiarrespaldotexto','restaurarrespaldotexto','descargarcomopdf','cancelaredicioncc','savemasnuminicio','initmasnuminicio','mostrarpendientesapto','cargarsaldosmasivo','exportarcuentascc','borrartodascuentascc','vercuentaguardada','exportarestadocartera','autocompletarproveedor','descargarlotepdf',];
   document.querySelectorAll('button').forEach(b=>{
     if(b.id==='logout-btn')return;
     const oc=(b.getAttribute('onclick')||'').toLowerCase();
