@@ -127,8 +127,13 @@ table.tbl tr:active td{background:var(--blue-light)}
 .solo-impresion{display:none}
 @media print{
   body > *:not(.solo-impresion){display:none!important}
-  .solo-impresion{display:block!important;position:absolute;top:0;left:0;width:100%;padding:20px}
+  .solo-impresion{display:block!important;position:absolute;top:0;left:0;width:100%;padding:12px;background:#fff;color:#000}
+  .solo-impresion *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}
+  .lote-wrap>*{page-break-after:always;break-after:page}
+  .lote-wrap>*:last-child{page-break-after:auto;break-after:auto}
+  @page{margin:10mm}
 }
+.solo-impresion{display:none}
 
 /* FACTURACIÓN EN LOTE - una cuenta por página */
 .cuenta-lote{border:1px dashed #ccc;border-radius:6px;padding:18px;margin-bottom:16px;background:#fff;color:#111;page-break-inside:avoid;break-inside:avoid}
@@ -154,7 +159,7 @@ table.tbl tr:active td{background:var(--blue-light)}
   <div style="background:#fff;border-radius:18px;padding:40px 36px;width:min(400px,100%);text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)">
     <div style="font-size:38px;font-weight:900;font-style:italic;color:#1a3fa0">Lukas</div>
     <div style="font-size:11px;color:#888;margin-top:2px;letter-spacing:.04em">NIT 900.457.679-7 &middot; Barranquilla</div>
-    <div style="font-size:10px;color:#16a34a;margin-top:6px;font-weight:700">Versión 2026.07.06-C · Egresos cruzan con proveedores</div>
+    <div style="font-size:10px;color:#16a34a;margin-top:6px;font-weight:700">Versión 2026.07.06-D · PDF por impresión nativa</div>
     <div style="font-size:14px;color:#444;margin:24px 0 18px;font-weight:600">Selecciona tu perfil de acceso</div>
 
     <button id="btn-admin" type="button" onclick="mostrarLoginAdmin()" style="width:100%;background:#1a3fa0;color:#fff;border:none;border-radius:12px;padding:18px;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:12px;line-height:1.5">
@@ -878,8 +883,25 @@ function getEstado(apto){
 // DASHBOARD
 function renderDashboard(){
   const pagos=S.get('pagos')||[];const gastos=S.get('gastos')||[];
-  const alDia=APTOS.filter(a=>getEstado(a)==='pagado').length;
-  const mora=APTOS.filter(a=>getEstado(a)==='mora').length;
+  // Estado real por saldo: un apto está en mora si debe (saldo>0), al día si saldo<=0
+  const padron=S.get('padron')||{};
+  const estadoReal=function(apto){
+    const d=padron[apto];
+    if(!d)return'vacio';
+    const pagosApto=(S.get('pagos')||[]).filter(function(x){return x.apto===apto;});
+    // Saldo = saldos anteriores del padrón + cuota causadas - pagos. Usamos el motor.
+    const cuotasCausadas=1; // junio ya causada (ajustable)
+    var sa;
+    try{ sa=calcularSaldosConcepto(d,pagosApto,cuotasCausadas); }
+    catch(e){ return'vacio'; }
+    // Saldo de meses ANTERIORES (sin incluir la cuota del mes actual)
+    var saldoAnterior=(sa.ordinaria||0)+(sa.extra2023||0)+(sa.extra2025||0)+(sa.intereses||0)+(sa.retro||0)+(sa.acuerdo||0)+(sa.juridico||0)+(sa.ascensor||0);
+    // En mora solo si debe meses anteriores; la cuota del mes actual no cuenta como mora
+    if(saldoAnterior>0)return'mora';
+    return'pagado';
+  };
+  const alDia=APTOS.filter(a=>estadoReal(a)==='pagado').length;
+  const mora=APTOS.filter(a=>estadoReal(a)==='mora').length;
   const ingr=pagos.filter(p=>p.estado==='pagado').reduce((s,p)=>s+parseFloat(p.valor||0),0);
   const egr=gastos.reduce((s,g)=>s+parseFloat(g.valor||0),0);
   document.getElementById('dash-stats').innerHTML=`
@@ -890,7 +912,7 @@ function renderDashboard(){
     <div class="stat amber"><div class="lbl">Gastos</div><div class="val" style="font-size:18px">$${fmt(egr)}</div></div>
     <div class="stat ${ingr-egr>=0?'green':'red'}"><div class="lbl">Balance</div><div class="val" style="font-size:18px">$${fmt(ingr-egr)}</div></div>`;
   document.getElementById('dash-apto-grid').innerHTML=APTOS.map(a=>{
-    const e=getEstado(a);const c=e==='pagado'?'ok':e==='mora'?'mora':e==='parcial'?'parcial':'vacio';
+    const e=estadoReal(a);const c=e==='pagado'?'ok':e==='mora'?'mora':'vacio';
     return`<div class="apto-cell ${c}" onclick="verApto('${a}')">${a}</div>`;
   }).join('');
   const todos=[...(pagos.map(p=>({...p,tipo:'pago'}))),
@@ -968,53 +990,26 @@ function imprimirHTML(htmlInterno){
 
 // Overlay de impresión a pantalla completa dentro de la misma app
 function descargarComoPDF(){
-  if(typeof html2pdf==='undefined'){
-    showToast('La función PDF aún se está cargando, espera unos segundos e intenta de nuevo');
-    return;
-  }
   const zona=document.getElementById('zona-impresion');
   if(!zona){showToast('No hay documento para exportar');return;}
   if(!zona.innerHTML||zona.offsetHeight<10){
     showToast('El documento aún se está preparando, espera un momento e intenta de nuevo');
     return;
   }
-  showToast('Generando PDF, espera un momento...');
-  const nombre='Lukas_documento_'+today()+'.pdf';
-  // Contenedor VISIBLE (necesario en iPad: html2canvas no captura elementos ocultos o fuera de pantalla).
-  // Se coloca sobre una capa que tapa la pantalla durante la captura, luego se elimina.
-  const capa=document.createElement('div');
-  capa.style.cssText='position:fixed;inset:0;background:rgba(255,255,255,0.98);z-index:200000;display:flex;align-items:flex-start;justify-content:center;overflow:auto';
-  const wrapper=document.createElement('div');
-  wrapper.style.cssText='width:780px;max-width:96%;background:#fff;padding:16px;box-sizing:border-box';
-  wrapper.innerHTML=zona.innerHTML;
-  const aviso=document.createElement('div');
-  aviso.textContent='Generando PDF...';
-  aviso.style.cssText='position:fixed;top:10px;left:50%;transform:translateX(-50%);background:#1a3fa0;color:#fff;padding:8px 18px;border-radius:20px;font-size:13px;z-index:200001';
-  capa.appendChild(wrapper);
-  document.body.appendChild(capa);
-  document.body.appendChild(aviso);
-  const opciones={
-    margin:[8,8,8,8],
-    filename:nombre,
-    image:{type:'jpeg',quality:0.98},
-    html2canvas:{scale:2,useCORS:true,logging:false,backgroundColor:'#ffffff'},
-    jsPDF:{unit:'mm',format:'letter',orientation:'portrait'},
-    pagebreak:{mode:['css','legacy']}
-  };
-  function limpiar(){
-    if(capa.parentNode)capa.parentNode.removeChild(capa);
-    if(aviso.parentNode)aviso.parentNode.removeChild(aviso);
-  }
-  // Esperar a que el navegador pinte el contenido visible antes de capturar
+  // Método nativo de Safari/iPad: crear una zona de solo-impresión y llamar a print().
+  // En el diálogo de impresión, el usuario elige "Guardar como PDF" (pellizcar para ampliar → compartir).
+  // Este método es mucho más confiable en iPad que html2canvas.
+  var previa=document.getElementById('zona-solo-impresion');
+  if(previa&&previa.parentNode)previa.parentNode.removeChild(previa);
+  var cont=document.createElement('div');
+  cont.id='zona-solo-impresion';
+  cont.className='solo-impresion';
+  cont.innerHTML=zona.innerHTML;
+  document.body.appendChild(cont);
+  showToast('Abriendo vista de impresión. Elige "Guardar como PDF".');
   setTimeout(function(){
-    html2pdf().set(opciones).from(wrapper).save().then(function(){
-      showToast('✅ PDF descargado: '+nombre);
-      limpiar();
-    }).catch(function(e){
-      showToast('Error al generar PDF: '+(e.message||e));
-      limpiar();
-    });
-  },500);
+    window.print();
+  },400);
 }
 
 function mostrarOverlayImpresion(htmlInterno){
@@ -3245,6 +3240,10 @@ if(document.readyState==='loading'){
   document.addEventListener('DOMContentLoaded', conectarLogin);
 }else{
   conectarLogin();
+window.addEventListener('afterprint',function(){
+  var z=document.getElementById('zona-solo-impresion');
+  if(z&&z.parentNode)z.parentNode.removeChild(z);
+});
 }
 // La app arranca cuando el usuario elige un perfil.
 
