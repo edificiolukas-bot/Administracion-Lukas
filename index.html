@@ -926,6 +926,8 @@ function renderDashboard(){
   const pagos=S.get('pagos')||[];const gastos=S.get('gastos')||[];
   // Estado real por saldo: un apto está en mora si debe (saldo>0), al día si saldo<=0
   const padron=S.get('padron')||{};
+  // Lista de unidades: combina las del padrón (incluye PARQ24 y unidades especiales) con las fijas
+  const UNIDADES=Object.keys(padron).length?Object.keys(padron).sort():APTOS;
   // Calcula saldo anterior (meses vencidos) y nivel de mora de cada apartamento
   const cuotasCausadas=1; // junio ya causada (ajustar al avanzar de mes)
   const nivelMora=function(apto){
@@ -950,7 +952,7 @@ function renderDashboard(){
   // Clasificar todos
   const clasif={alDia:[],leve:[],moderada:[],critica:[]};
   var deudaCritica=0, deudaTotal=0;
-  APTOS.forEach(function(a){
+  UNIDADES.forEach(function(a){
     const r=nivelMora(a);
     if(r.nivel==='vacio')return;
     if(clasif[r.nivel])clasif[r.nivel].push({apto:a,meses:r.meses,saldo:r.saldo});
@@ -961,7 +963,7 @@ function renderDashboard(){
   const ingr=pagos.filter(p=>p.estado==='pagado').reduce((s,p)=>s+parseFloat(p.valor||0),0);
   const egr=gastos.reduce((s,g)=>s+parseFloat(g.valor||0),0);
   document.getElementById('dash-stats').innerHTML=`
-    <div class="stat"><div class="lbl">Apartamentos</div><div class="val">${APTOS.length}</div></div>
+    <div class="stat"><div class="lbl">Apartamentos</div><div class="val">${UNIDADES.length}</div></div>
     <div class="stat green" onclick="verNivelMora('alDia')" style="cursor:pointer"><div class="lbl">🟢 Al día</div><div class="val">${clasif.alDia.length}</div></div>
     <div class="stat" style="background:#fffbeb;cursor:pointer" onclick="verNivelMora('leve')"><div class="lbl">🟡 Mora leve (1-2)</div><div class="val">${clasif.leve.length}</div></div>
     <div class="stat amber" onclick="verNivelMora('moderada')" style="cursor:pointer"><div class="lbl">🟠 Mora moderada (3-5)</div><div class="val">${clasif.moderada.length}</div></div>
@@ -970,7 +972,7 @@ function renderDashboard(){
     <div class="stat"><div class="lbl">Cartera total</div><div class="val" style="font-size:16px">$${fmt(deudaTotal)}</div></div>
     <div class="stat amber"><div class="lbl">Gastos</div><div class="val" style="font-size:16px">$${fmt(egr)}</div></div>`;
   const colorNivel={alDia:'ok',leve:'leve',moderada:'moderada',critica:'critica'};
-  document.getElementById('dash-apto-grid').innerHTML=APTOS.map(a=>{
+  document.getElementById('dash-apto-grid').innerHTML=UNIDADES.map(a=>{
     const r=nivelMora(a);const c=colorNivel[r.nivel]||'vacio';
     return`<div class="apto-cell ${c}" onclick="verApto('${a}')" title="${r.meses>0?r.meses.toFixed(1)+' meses':'al día'}">${a}</div>`;
   }).join('');
