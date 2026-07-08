@@ -101,6 +101,9 @@ table.tbl tr:active td{background:var(--blue-light)}
 .apto-cell.mora{background:var(--red-light);color:var(--red);border-color:#f7c1c1}
 .apto-cell.parcial{background:var(--amber-light);color:var(--amber);border-color:#fac775}
 .apto-cell.vacio{background:var(--gray);color:var(--text3);border-color:var(--gray-mid)}
+  .apto-cell.leve{background:#fef9e7;color:#a67c00;border-color:#f5d76e}
+  .apto-cell.moderada{background:#fdebd0;color:#b9770e;border-color:#f0a94e}
+  .apto-cell.critica{background:#fadbd8;color:#a02020;border-color:#e6736b}
 .apto-cell:active{transform:scale(.93)}
 
 /* DASHBOARD 2-COL */
@@ -159,7 +162,7 @@ table.tbl tr:active td{background:var(--blue-light)}
   <div style="background:#fff;border-radius:18px;padding:40px 36px;width:min(400px,100%);text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)">
     <div style="font-size:38px;font-weight:900;font-style:italic;color:#1a3fa0">Lukas</div>
     <div style="font-size:11px;color:#888;margin-top:2px;letter-spacing:.04em">NIT 900.457.679-7 &middot; Barranquilla</div>
-    <div style="font-size:10px;color:#16a34a;margin-top:6px;font-weight:700">Versión 2026.07.06-E · Mora real en panel</div>
+    <div style="font-size:10px;color:#16a34a;margin-top:6px;font-weight:700">Versión 2026.07.06-F · Niveles de mora</div>
     <div style="font-size:14px;color:#444;margin:24px 0 18px;font-weight:600">Selecciona tu perfil de acceso</div>
 
     <button id="btn-admin" type="button" onclick="mostrarLoginAdmin()" style="width:100%;background:#1a3fa0;color:#fff;border:none;border-radius:12px;padding:18px;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:12px;line-height:1.5">
@@ -213,11 +216,17 @@ table.tbl tr:active td{background:var(--blue-light)}
 
 <!-- DASHBOARD -->
 <div id="page-dashboard" class="page active">
-  <div class="page-header"><h1>Panel principal</h1><p>Edificio Lukas · Administración Transitoria 2026</p></div>
+  <div class="page-header"><h1>Panel principal</h1><p>Edificio Lukas · Administración 2026</p></div>
   <div class="stat-grid" id="dash-stats"></div>
   <div class="dash-cols">
     <div class="card">
-      <h2>Estado de cartera — 32 apartamentos</h2>
+      <h2>Estado de cartera por apartamento</h2>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;font-size:11px">
+        <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:3px;background:#9fe1cb;display:inline-block"></span>Al día</span>
+        <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:3px;background:#f5d76e;display:inline-block"></span>Leve (1-2)</span>
+        <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:3px;background:#f0a94e;display:inline-block"></span>Moderada (3-5)</span>
+        <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:3px;background:#e6736b;display:inline-block"></span>Crítica (6+)</span>
+      </div>
       <div class="apto-grid" id="dash-apto-grid"></div>
       <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap">
         <span class="badge badge-green">Al día</span>
@@ -881,39 +890,88 @@ function getEstado(apto){
 }
 
 // DASHBOARD
+function verNivelMora(nivel){
+  const clasif=window._clasifMora||{};
+  const lista=clasif[nivel]||[];
+  const nombres={alDia:'🟢 Al día',leve:'🟡 Mora leve (1-2 meses)',moderada:'🟠 Mora moderada (3-5 meses)',critica:'🔴 Mora crítica (6+ meses)'};
+  const padron=S.get('padron')||{};
+  if(!lista.length){showToast('No hay apartamentos en: '+(nombres[nivel]||nivel));return;}
+  // Ordenar por saldo descendente (los que más deben primero)
+  lista.sort(function(a,b){return b.saldo-a.saldo;});
+  let filas=lista.map(function(x){
+    const d=padron[x.apto]||{};
+    return '<tr><td style="padding:6px 10px;border-bottom:1px solid #eee"><strong>'+x.apto+'</strong></td>'+
+      '<td style="padding:6px 10px;border-bottom:1px solid #eee;font-size:12px">'+(d.prop||'—')+'</td>'+
+      '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center">'+(x.meses>0?x.meses.toFixed(1):'—')+'</td>'+
+      '<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;font-weight:700">$'+fmt(x.saldo)+'</td></tr>';
+  }).join('');
+  const totalNivel=lista.reduce(function(s,x){return s+x.saldo;},0);
+  const html='<div style="padding:18px;font-family:Arial,sans-serif;color:#222">'+
+    '<div style="font-size:18px;font-weight:800;color:#1a3fa0;margin-bottom:4px">'+(nombres[nivel]||nivel)+'</div>'+
+    '<div style="font-size:12px;color:#666;margin-bottom:14px">'+lista.length+' apartamento(s) · Deuda del grupo: $'+fmt(totalNivel)+'</div>'+
+    '<table style="width:100%;border-collapse:collapse;font-size:13px">'+
+    '<thead><tr style="background:#1a3fa0;color:#fff">'+
+    '<th style="padding:7px 10px;text-align:left">Apto</th>'+
+    '<th style="padding:7px 10px;text-align:left">Propietario</th>'+
+    '<th style="padding:7px 10px;text-align:center">Meses</th>'+
+    '<th style="padding:7px 10px;text-align:right">Deuda</th></tr></thead>'+
+    '<tbody>'+filas+'</tbody></table>'+
+    (nivel==='critica'?'<div style="margin-top:14px;padding:10px;background:#fdecea;border-radius:8px;font-size:12px;color:#a02020">Estos apartamentos son prioridad para negociación de pago urgente (campaña Rescatemos a Lukas).</div>':'')+
+    '</div>';
+  mostrarOverlayImpresion(html);
+}
+
 function renderDashboard(){
   const pagos=S.get('pagos')||[];const gastos=S.get('gastos')||[];
   // Estado real por saldo: un apto está en mora si debe (saldo>0), al día si saldo<=0
   const padron=S.get('padron')||{};
-  const estadoReal=function(apto){
+  // Calcula saldo anterior (meses vencidos) y nivel de mora de cada apartamento
+  const cuotasCausadas=1; // junio ya causada (ajustar al avanzar de mes)
+  const nivelMora=function(apto){
     const d=padron[apto];
-    if(!d)return'vacio';
+    if(!d)return{nivel:'vacio',meses:0,saldo:0};
     const pagosApto=(S.get('pagos')||[]).filter(function(x){return x.apto===apto;});
-    // Saldo = saldos anteriores del padrón + cuota causadas - pagos. Usamos el motor.
-    const cuotasCausadas=1; // junio ya causada (ajustable)
     var sa;
     try{ sa=calcularSaldosConcepto(d,pagosApto,cuotasCausadas); }
-    catch(e){ return'vacio'; }
-    // Saldo de meses ANTERIORES (sin incluir la cuota del mes actual)
-    var saldoAnterior=(sa.ordinaria||0)+(sa.extra2023||0)+(sa.extra2025||0)+(sa.intereses||0)+(sa.retro||0)+(sa.acuerdo||0)+(sa.juridico||0)+(sa.ascensor||0);
-    // En mora solo si debe meses anteriores; la cuota del mes actual no cuenta como mora
-    if(saldoAnterior>0)return'mora';
-    return'pagado';
+    catch(e){ return{nivel:'vacio',meses:0,saldo:0}; }
+    var saldoAnt=(sa.ordinaria||0)+(sa.extra2023||0)+(sa.extra2025||0)+(sa.intereses||0)+(sa.retro||0)+(sa.acuerdo||0)+(sa.juridico||0)+(sa.ascensor||0);
+    if(saldoAnt<=0)return{nivel:'alDia',meses:0,saldo:0};
+    // Meses de mora = saldo anterior / cuota mensual
+    var meses;
+    if(d.cuota&&d.cuota>0){ meses=saldoAnt/d.cuota; }
+    else{ meses=saldoAnt>3000000?6:(saldoAnt>1000000?3:1); } // sin cuota: clasificar por monto
+    var niv;
+    if(meses<=2)niv='leve';
+    else if(meses<=5)niv='moderada';
+    else niv='critica';
+    return{nivel:niv,meses:meses,saldo:saldoAnt};
   };
-  const alDia=APTOS.filter(a=>estadoReal(a)==='pagado').length;
-  const mora=APTOS.filter(a=>estadoReal(a)==='mora').length;
+  // Clasificar todos
+  const clasif={alDia:[],leve:[],moderada:[],critica:[]};
+  var deudaCritica=0, deudaTotal=0;
+  APTOS.forEach(function(a){
+    const r=nivelMora(a);
+    if(r.nivel==='vacio')return;
+    if(clasif[r.nivel])clasif[r.nivel].push({apto:a,meses:r.meses,saldo:r.saldo});
+    deudaTotal+=r.saldo;
+    if(r.nivel==='critica')deudaCritica+=r.saldo;
+  });
+  window._clasifMora=clasif; // para el detalle al tocar
   const ingr=pagos.filter(p=>p.estado==='pagado').reduce((s,p)=>s+parseFloat(p.valor||0),0);
   const egr=gastos.reduce((s,g)=>s+parseFloat(g.valor||0),0);
   document.getElementById('dash-stats').innerHTML=`
     <div class="stat"><div class="lbl">Apartamentos</div><div class="val">${APTOS.length}</div></div>
-    <div class="stat green"><div class="lbl">Al día</div><div class="val">${alDia}</div></div>
-    <div class="stat red"><div class="lbl">En mora</div><div class="val">${mora}</div></div>
-    <div class="stat"><div class="lbl">Ingresos</div><div class="val" style="font-size:18px">$${fmt(ingr)}</div></div>
-    <div class="stat amber"><div class="lbl">Gastos</div><div class="val" style="font-size:18px">$${fmt(egr)}</div></div>
-    <div class="stat ${ingr-egr>=0?'green':'red'}"><div class="lbl">Balance</div><div class="val" style="font-size:18px">$${fmt(ingr-egr)}</div></div>`;
+    <div class="stat green" onclick="verNivelMora('alDia')" style="cursor:pointer"><div class="lbl">🟢 Al día</div><div class="val">${clasif.alDia.length}</div></div>
+    <div class="stat" style="background:#fffbeb;cursor:pointer" onclick="verNivelMora('leve')"><div class="lbl">🟡 Mora leve (1-2)</div><div class="val">${clasif.leve.length}</div></div>
+    <div class="stat amber" onclick="verNivelMora('moderada')" style="cursor:pointer"><div class="lbl">🟠 Mora moderada (3-5)</div><div class="val">${clasif.moderada.length}</div></div>
+    <div class="stat red" onclick="verNivelMora('critica')" style="cursor:pointer"><div class="lbl">🔴 Mora crítica (6+)</div><div class="val">${clasif.critica.length}</div></div>
+    <div class="stat red"><div class="lbl">Deuda crítica</div><div class="val" style="font-size:16px">$${fmt(deudaCritica)}</div></div>
+    <div class="stat"><div class="lbl">Cartera total</div><div class="val" style="font-size:16px">$${fmt(deudaTotal)}</div></div>
+    <div class="stat amber"><div class="lbl">Gastos</div><div class="val" style="font-size:16px">$${fmt(egr)}</div></div>`;
+  const colorNivel={alDia:'ok',leve:'leve',moderada:'moderada',critica:'critica'};
   document.getElementById('dash-apto-grid').innerHTML=APTOS.map(a=>{
-    const e=estadoReal(a);const c=e==='pagado'?'ok':e==='mora'?'mora':'vacio';
-    return`<div class="apto-cell ${c}" onclick="verApto('${a}')">${a}</div>`;
+    const r=nivelMora(a);const c=colorNivel[r.nivel]||'vacio';
+    return`<div class="apto-cell ${c}" onclick="verApto('${a}')" title="${r.meses>0?r.meses.toFixed(1)+' meses':'al día'}">${a}</div>`;
   }).join('');
   const todos=[...(pagos.map(p=>({...p,tipo:'pago'}))),
     ...(gastos.map(g=>({...g,tipo:'gasto'})))].sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')).slice(0,8);
@@ -2549,7 +2607,7 @@ function aplicarBloqueosConsulta(){
   const permitidas=['goto','closemodal','document','verapto','veracta','vercom',
     'generarinforme','imprimirinforme','exportarinformecsv','exportgastos',
     'previewcc','printcom','printultimocom','printasamblea','calcquorum',
-    'renderpagos','rendergastos','entrarconsulta','validaradmin','mostrarloginadmin','previewmasiva','imprimirmasiva','cargarmasiva','cargarapto','verproveedor','imprimiregreso','importarrespaldo','cargardatospadronenpago','imprimirrecibo','calcularcartera','exportarcartera','imprimircartera','imprimirtodosrecibos','generarrespaldotexto','copiarrespaldotexto','restaurarrespaldotexto','descargarcomopdf','cancelaredicioncc','savemasnuminicio','initmasnuminicio','mostrarpendientesapto','cargarsaldosmasivo','exportarcuentascc','borrartodascuentascc','vercuentaguardada','exportarestadocartera','autocompletarproveedor','descargarlotepdf','limpiarfacturasduplicadas',];
+    'renderpagos','rendergastos','entrarconsulta','validaradmin','mostrarloginadmin','previewmasiva','imprimirmasiva','cargarmasiva','cargarapto','verproveedor','imprimiregreso','importarrespaldo','cargardatospadronenpago','imprimirrecibo','calcularcartera','exportarcartera','imprimircartera','imprimirtodosrecibos','generarrespaldotexto','copiarrespaldotexto','restaurarrespaldotexto','descargarcomopdf','cancelaredicioncc','savemasnuminicio','initmasnuminicio','mostrarpendientesapto','cargarsaldosmasivo','exportarcuentascc','borrartodascuentascc','vercuentaguardada','exportarestadocartera','autocompletarproveedor','descargarlotepdf','limpiarfacturasduplicadas','vernivelmora',];
   document.querySelectorAll('button').forEach(b=>{
     if(b.id==='logout-btn')return;
     const oc=(b.getAttribute('onclick')||'').toLowerCase();
