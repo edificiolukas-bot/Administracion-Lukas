@@ -169,7 +169,7 @@ table.tbl tr:active td{background:var(--blue-light)}
   <div style="background:#fff;border-radius:18px;padding:40px 36px;width:min(400px,100%);text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)">
     <div style="font-size:38px;font-weight:900;font-style:italic;color:#1a3fa0">Lukas</div>
     <div style="font-size:11px;color:#888;margin-top:2px;letter-spacing:.04em">NIT 900.457.679-7 &middot; Barranquilla</div>
-    <div style="font-size:10px;color:#16a34a;margin-top:6px;font-weight:700">Versión 2026.10.15-U · Nota de abonos muestra el concepto real de cada pago</div>
+    <div style="font-size:10px;color:#16a34a;margin-top:6px;font-weight:700">Versión 2026.11.22-V · Manejo de convenios de pago (sin duplicar cuotas)</div>
     <div style="font-size:14px;color:#444;margin:24px 0 18px;font-weight:600">Selecciona tu perfil de acceso</div>
 
     <button id="btn-admin" type="button" onclick="mostrarLoginAdmin()" style="width:100%;background:#1a3fa0;color:#fff;border:none;border-radius:12px;padding:18px;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:12px;line-height:1.5">
@@ -337,6 +337,15 @@ table.tbl tr:active td{background:var(--blue-light)}
       <div class="field"><label>Acuerdo de pago ($)</label><input id="pad-sa-acuerdo" type="number" inputmode="numeric" placeholder="0"></div>
       <div class="field"><label>Jurídico ($)</label><input id="pad-sa-juridico" type="number" inputmode="numeric" placeholder="0"></div>
       <div class="field"><label>Ascensor ($)</label><input id="pad-sa-ascensor" type="number" inputmode="numeric" placeholder="0"></div>
+    </div>
+    <div style="background:#fff8ee;border:1px solid #f0c674;border-radius:8px;padding:12px;margin:14px 0">
+      <h3 style="font-size:13px;color:#8a5a00;margin:0 0 6px">🤝 Convenio de pago (opcional)</h3>
+      <p style="font-size:12px;color:#8a5a00;margin:0 0 8px">Llena esto SOLO si el apartamento tiene un convenio de pago vigente. El valor del convenio va en el campo <strong>"Acuerdo de pago"</strong> de arriba. Aquí indicas hasta qué mes de cuota corriente YA está incluido en ese acuerdo, para que la app no se la cobre doble.</p>
+      <div class="form-grid g2">
+        <div class="field"><label>Cuotas corrientes ya incluidas en el acuerdo</label><input id="pad-convenio-previas" type="number" inputmode="numeric" placeholder="ej: 6 (jun a nov)"></div>
+        <div class="field"><label>N° / fecha del convenio (soporte)</label><input id="pad-convenio-obs" placeholder="Convenio 503 · 9-nov-2026"></div>
+      </div>
+      <p style="font-size:11px;color:#8a5a00;margin:6px 0 0">Ejemplo 503: el acuerdo incluye la deuda hasta noviembre (6 cuotas causadas: jun-nov). Pon <strong>6</strong>. Así la app solo le causará la cuota corriente desde diciembre en adelante, sin duplicar.</p>
     </div>
     <div class="btn-group"><button class="btn btn-primary" onclick="savePadron()">Guardar apartamento</button>
     <button class="btn btn-outline" onclick="cargarApto()">Cargar datos del apto seleccionado</button></div>
@@ -3509,15 +3518,19 @@ function savePadron(){
     saRetro:fRet,
     saAcuerdo:fAcu,
     saJuridico:fJur,
-    saAscensor:fAsc
+    saAscensor:fAsc,
+    convenioCuotasPrevias:(gv('pad-convenio-previas')!==''?parseFloat(gv('pad-convenio-previas')):undefined),
+    convenioObs:gv('pad-convenio-obs')||''
   };
+  // Limpiar convenioCuotasPrevias si quedó vacío o NaN (apto sin convenio)
+  if(isNaN(padron[apto].convenioCuotasPrevias))delete padron[apto].convenioCuotasPrevias;
   S.set('padron',padron);
   renderPadronTabla();
   renderHistPropietarios();
   if(!(anterior && anterior.prop && nuevoProp && anterior.prop.trim()!==nuevoProp.trim())){
     showToast('Apartamento '+apto+' guardado en el padrón');
   }
-  ['pad-prop','pad-nit','pad-dir','pad-coef','pad-cuota','pad-sa-ordinaria','pad-sa-extra2023','pad-sa-extra2025','pad-sa-intereses','pad-sa-retro','pad-sa-acuerdo','pad-sa-juridico','pad-sa-ascensor'].forEach(id=>{var e=document.getElementById(id);if(e)e.value='';});
+  ['pad-prop','pad-nit','pad-dir','pad-coef','pad-cuota','pad-sa-ordinaria','pad-sa-extra2023','pad-sa-extra2025','pad-sa-intereses','pad-sa-retro','pad-sa-acuerdo','pad-sa-juridico','pad-sa-ascensor','pad-convenio-previas','pad-convenio-obs'].forEach(id=>{var e=document.getElementById(id);if(e)e.value='';});
 }
 
 function renderHistPropietarios(){
@@ -3556,6 +3569,8 @@ function cargarApto(){
   document.getElementById('pad-sa-intereses').value=d.saIntereses||'';
   document.getElementById('pad-sa-retro').value=d.saRetro||'';
   document.getElementById('pad-sa-acuerdo').value=d.saAcuerdo||'';
+  var _cp=document.getElementById('pad-convenio-previas');if(_cp)_cp.value=(d.convenioCuotasPrevias!==undefined&&d.convenioCuotasPrevias!==null)?d.convenioCuotasPrevias:'';
+  var _co=document.getElementById('pad-convenio-obs');if(_co)_co.value=d.convenioObs||'';
   document.getElementById('pad-sa-juridico').value=d.saJuridico||'';
   document.getElementById('pad-sa-ascensor').value=d.saAscensor||'';
 }
@@ -3639,9 +3654,20 @@ function movimientosApto(apto){
 
 function calcularSaldosConcepto(d, pagosApto, cuotasCausadas){
   const cuota=parseFloat(d.cuota)||0;
+  // CONVENIO DE PAGO: si el apto tiene un convenio (saAcuerdo>0 y convenioCuotasPrevias definido),
+  // su deuda ordinaria vieja ya está DENTRO del acuerdo. No se le causan las cuotas que ya
+  // quedaron absorbidas por el convenio; solo se causan las cuotas corrientes POSTERIORES.
+  // convenioCuotasPrevias = cuántas cuotas causadas ya están incluidas en el acuerdo.
+  let cuotasOrdinariasACausar=cuotasCausadas;
+  const convPrev=parseFloat(d.convenioCuotasPrevias);
+  const tieneConvenio=(parseFloat(d.saAcuerdo)||0)>0 && !isNaN(convPrev);
+  if(tieneConvenio){
+    // Solo causar las cuotas POSTERIORES a las ya incluidas en el convenio
+    cuotasOrdinariasACausar=Math.max(0, cuotasCausadas-convPrev);
+  }
   // Saldos iniciales del padrón (al 7 de mayo)
   const saldos={
-    ordinaria:(parseFloat(d.saOrdinaria)||0)+(cuota*cuotasCausadas), // acumula cuotas causadas
+    ordinaria:(parseFloat(d.saOrdinaria)||0)+(cuota*cuotasOrdinariasACausar), // acumula cuotas causadas (ajustado por convenio)
     extra2023:parseFloat(d.saExtra2023)||0,
     extra2025:parseFloat(d.saExtra2025)||0,
     intereses:parseFloat(d.saIntereses)||0,
